@@ -21,3 +21,6 @@ Projet statique, sans build command.
 - Output directory: vide
 
 Branche de production: main
+
+
+Deployment sync trigger: 2026-09-26 21:13 Europe/Paris
