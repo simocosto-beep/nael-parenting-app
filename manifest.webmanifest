@@ -1,0 +1,10 @@
+{
+  "name":"Naël — Grandir ensemble",
+  "short_name":"Naël",
+  "description":"Suivi parental premium",
+  "start_url":"./",
+  "display":"standalone",
+  "background_color":"#061022",
+  "theme_color":"#0b1730",
+  "lang":"fr"
+}
