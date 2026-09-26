@@ -16,8 +16,8 @@
 <script>
 const K="nael.state.v05.web";
 const D={screen:"home",profiles:[],active:null,events:[],appointments:[],vaccines:[],reminders:[],growth:[]};
-let s=Object.assign({},D,JSON.parse(localStorage.getItem(K)||"{}"));
-const $=id=>document.getElementById(id),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7),save=()=>localStorage.setItem(K,JSON.stringify(s));
+let s;try{s=Object.assign({},D,JSON.parse(localStorage.getItem(K)||"{}"))}catch(e){s=JSON.parse(JSON.stringify(D));try{localStorage.removeItem(K)}catch(_){}}
+const app=document.getElementById("app");\nconst $=id=>document.getElementById(id),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7),save=()=>{try{localStorage.setItem(K,JSON.stringify(s))}catch(e){}};
 function toast(t){const e=$("toast");e.textContent=t;e.classList.add("show");setTimeout(()=>e.classList.remove("show"),1600)}
 function p(){return s.profiles.find(x=>x.id===s.active)||null}
 function age(d){if(!d)return"";const a=new Date(d),n=new Date();let m=(n.getFullYear()-a.getFullYear())*12+n.getMonth()-a.getMonth();return m<24?m+" mois":Math.floor(m/12)+" ans"}
@@ -56,5 +56,5 @@ function calendar(){if(!need())return;const n=new Date(),y=n.getFullYear(),m=n.g
 function settings(){const count=s.profiles.length;app.innerHTML='<button class="btn ghost" onclick="go(\'home\')">← Retour</button><h1 class="title">Réglages</h1><div class="card"><b>Naël V0.5</b><p class="muted">Données locales sur cet appareil • '+count+' profil(s)</p><div class="row"><button class="btn ghost" onclick="exportData()">Exporter JSON</button><button class="btn danger" onclick="resetAll()">Réinitialiser</button></div></div><div class="card"><b>Confidentialité</b><p class="muted">Cette version stocke les données uniquement dans le navigateur. Les informations de santé servent à l’organisation et ne remplacent pas un professionnel de santé.</p></div>'+nav("settings")}
 function exportData(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(s,null,2)],{type:"application/json"}));a.download="nael-backup.json";a.click()}function resetAll(){if(confirm("Tout supprimer ?")){localStorage.removeItem(K);s=JSON.parse(JSON.stringify(D));render()}}
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]))}function attr(v){return esc(v)}
-if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));render();
+window.addEventListener("error",e=>{if(app&&!app.innerHTML)app.innerHTML="<div style=\"padding:24px;color:#fff\"><h2>Naël</h2><p>Erreur de chargement.</p><small>"+String(e.message||"Erreur inconnue")+"</small></div>"});try{render()}catch(e){app.innerHTML="<div style=\"padding:24px;color:#fff\"><h2>Naël</h2><p>Erreur de chargement.</p><small>"+String(e.message||e)+"</small></div>"}if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js?v=2").catch(()=>{}));
 </script></body></html>
