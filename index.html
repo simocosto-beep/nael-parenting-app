@@ -998,3 +998,1005 @@ function renderChecklists(){
  const sections=["maternity","daycare","travel","custom"];
  root.innerHTML='<main class="screen">'+header("Checklists","ORGANISATION")+
  '<p class="subtitle">Des listes simples à cocher et modifier selon votre famille.</p>'+
+ sections.map(k=>{const arr=c[k]||[],pct=checklistProgress(arr);return '<div class="checkCard card"><div class="eyebrow">'+checklistTitle(k).toUpperCase()+'</div><div class="progress"><i style="width:'+pct+'%"></i></div><div class="muted">'+pct+'% terminé</div>'+arr.map(it=>'<label class="checkItem '+(it.done?'done':'')+'"><input type="checkbox" '+(it.done?'checked':'')+' data-list="'+k+'" data-id="'+it.id+'" onchange="toggleChecklist(this.dataset.list,this.dataset.id)"><span>'+esc(it.text)+'</span></label>').join("")+'<div class="field"><input id="new_'+k+'" placeholder="Ajouter un élément..."></div><button class="btn secondary mini" data-list="'+k+'" onclick="addChecklistItem(this.dataset.list)">+ Ajouter</button></div>'}).join('<div style="height:12px"></div>')+
+ '</main>'
+}
+
+function sanitizeName(name){return String(name||"file").replace(/[^a-zA-Z0-9._-]+/g,"_")}
+async function uploadPrivateFile(file,folder,id){
+ if(!sb||!currentSession)return null;
+ const fam=await ensureRemoteFamily();
+ const path=fam.id+"/"+folder+"/"+state.activeProfileId+"/"+id+"-"+sanitizeName(file.name);
+ const {error}=await sb.storage.from("nael-private").upload(path,file,{upsert:false,contentType:file.type||undefined});
+ if(error)throw error;
+ return path
+}
+async function signedPrivateUrl(path,expires=3600){
+ if(!sb||!currentSession||!path)return null;
+ const {data,error}=await sb.storage.from("nael-private").createSignedUrl(path,expires);
+ if(error)return null;
+ return data?.signedUrl||null
+}
+async function hydratePrivateMedia(){
+ if(!sb||!currentSession)return;
+ const nodes=[...document.querySelectorAll("[data-storage-path]")];
+ for(const el of nodes){
+  const path=el.dataset.storagePath;if(!path)continue;
+  const url=await signedPrivateUrl(path,3600);
+  if(!url)continue;
+  if(el.tagName==="IMG") el.src=url;
+  else el.href=url;
+ }
+}
+window.openCloudFile=async path=>{const url=await signedPrivateUrl(path,600);if(url)window.open(url,"_blank","noopener")}
+
+function renderDocuments(){
+ const arr=state.documents.filter(d=>d.profileId===state.activeProfileId).slice().reverse();
+ root.innerHTML='<main class="screen">'+header("Documents médicaux","DOSSIER")+
+ '<div class="notice">'+(currentSession?'Les fichiers ajoutés pendant votre connexion cloud sont envoyés dans votre espace privé Supabase.':'Mode local : connectez-vous au cloud pour stocker les fichiers de façon privée.')+'</div>'+
+ '<div class="field"><label>Catégorie</label><select id="docCategory"><option>Ordonnance</option><option>Analyse</option><option>Certificat</option><option>Compte rendu</option><option>Carnet de santé</option><option>Autre</option></select></div>'+
+ '<div class="field"><label>Titre</label><input id="docTitle" placeholder="Ex : ordonnance pédiatre"></div>'+
+ '<div class="field"><label>Fichier / image</label><input id="docFile" type="file" accept="image/*,.pdf"></div>'+
+ '<div class="field"><label>Note</label><textarea id="docNote"></textarea></div>'+btn("Ajouter le document","addDocument()")+
+ '<h2 class="sectionTitle">Mes documents</h2><div class="docGrid">'+(arr.length?arr.map(d=>'<div class="docCard card"><div class="thumb">'+(d.storagePath&&d.mime&&d.mime.startsWith("image/")?'<img data-storage-path="'+esc(d.storagePath)+'" alt="">':d.preview&&d.mime&&d.mime.startsWith("image/")?'<img src="'+d.preview+'" alt="">':'<div class="fileIcon">📄</div>')+'</div><span class="badgeSoft">'+esc(d.category)+'</span>'+(d.storagePath?'<span class="cloudBadge">☁ Cloud</span>':'')+'<h3>'+esc(d.title)+'</h3><div class="docMeta">'+new Date(d.ts).toLocaleDateString()+'</div><p class="muted">'+esc(d.note||"")+'</p><div class="mediaActions">'+(d.storagePath?'<button class="btn secondary mini" data-path="'+esc(d.storagePath)+'" onclick="openCloudFile(this.dataset.path)">Ouvrir</button>':'')+'<button class="btn danger mini" data-id="'+d.id+'" onclick="deleteDocument(this.dataset.id)">Supprimer</button></div></div>').join(""):'<div class="empty card" style="grid-column:1/-1">Aucun document.</div>')+'</div></main>';
+ setTimeout(hydratePrivateMedia,0)
+}
+function renderMemoriesAlbum(){
+ const arr=state.memories.filter(m=>m.profileId===state.activeProfileId).slice().reverse();
+ root.innerHTML='<main class="screen">'+header("Souvenirs","ALBUM")+
+ '<div class="notice">'+(currentSession?'Les nouvelles photos sont stockées dans votre espace cloud privé.':'Connectez-vous au cloud pour synchroniser les photos entre appareils.')+'</div>'+
+ '<div class="field"><label>Photo</label><input id="memoryFile" type="file" accept="image/*"></div>'+
+ '<div class="field"><label>Légende</label><input id="memoryCaption" placeholder="Ex : première balade au parc"></div>'+
+ '<div class="field"><label>Date</label><input id="memoryDate" type="date"></div>'+btn("Ajouter au journal","addMemory()")+
+ '<h2 class="sectionTitle">Timeline</h2><div class="memoryGrid">'+(arr.length?arr.map(m=>'<div class="memoryCard card"><div class="thumb">'+(m.storagePath?'<img data-storage-path="'+esc(m.storagePath)+'" alt="">':m.photo?'<img src="'+m.photo+'" alt="">':'📷')+'</div>'+(m.storagePath?'<span class="cloudBadge">☁ Cloud</span>':'')+'<h3>'+esc(m.caption||"Souvenir")+'</h3><div class="memoryMeta">'+esc(m.date||new Date(m.ts).toISOString().slice(0,10))+'</div><button class="btn danger mini" data-id="'+m.id+'" onclick="deleteMemory(this.dataset.id)">Supprimer</button></div>').join(""):'<div class="empty card" style="grid-column:1/-1">Aucun souvenir photo.</div>')+'</div></main>';
+ setTimeout(hydratePrivateMedia,0)
+}
+function chartSvg(points,key,label){
+ if(!points.length)return '<div class="empty card">Pas assez de mesures.</div>';
+ const vals=points.map(x=>Number(x[key])).filter(v=>Number.isFinite(v)&&v>0);
+ if(!vals.length)return '<div class="empty card">Pas assez de mesures.</div>';
+ const min=Math.min(...vals),max=Math.max(...vals),range=Math.max(0.1,max-min),w=320,h=170,pad=24;
+ const usable=points.filter(x=>Number(x[key])>0);
+ const coords=usable.map((x,i)=>{const xx=pad+(usable.length===1?0:(i/(usable.length-1))*(w-pad*2));const yy=h-pad-((Number(x[key])-min)/range)*(h-pad*2);return [xx,yy,x]});
+ const path=coords.map((c,i)=>(i?"L":"M")+c[0].toFixed(1)+" "+c[1].toFixed(1)).join(" ");
+ return '<div class="chartCard card"><div class="eyebrow">'+label.toUpperCase()+'</div><svg class="svgChart" viewBox="0 0 '+w+' '+h+'"><line class="chartGrid" x1="'+pad+'" y1="'+(h-pad)+'" x2="'+(w-pad)+'" y2="'+(h-pad)+'"/><line class="chartGrid" x1="'+pad+'" y1="'+pad+'" x2="'+pad+'" y2="'+(h-pad)+'"/><path class="chartLine" d="'+path+'"/>'+coords.map(c=>'<circle class="chartDot" cx="'+c[0]+'" cy="'+c[1]+'" r="4"><title>'+Number(c[2][key])+' '+(key==="weight"?"kg":"cm")+'</title></circle>').join("")+'</svg><div class="muted">Min '+min+' • Max '+max+'</div></div>'
+}
+function renderGrowthAdvanced(){
+ const arr=state.growth.filter(x=>x.profileId===state.activeProfileId).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+ root.innerHTML='<main class="screen">'+header("Croissance","COURBES")+
+ '<div class="notice">Ces graphiques décrivent uniquement les mesures saisies. Ils ne remplacent pas l’interprétation des courbes de référence par un professionnel.</div>'+
+ '<div class="inlineFields"><div class="field"><label>Poids (kg)</label><input id="gweight" type="number" step="0.01"></div><div class="field"><label>Taille (cm)</label><input id="gheight" type="number" step="0.1"></div></div>'+btn("Ajouter la mesure","addGrowth()")+
+ '<h2 class="sectionTitle">Courbes</h2>'+chartSvg(arr,"weight","Poids")+chartSvg(arr,"height","Taille")+
+ '<h2 class="sectionTitle">Historique</h2>'+growthHistory()+'</main>'
+}
+function buildSmartSummary(){
+ const p=activeProfile();if(!p)return ["Créez un profil pour générer un résumé."];
+ const out=[],feed=todayEvents("feeding"),sleep=todayEvents("sleep"),diap=todayEvents("diapers"),sleepMin=sleep.reduce((a,e)=>a+(Number(e.durationMin)||0),0);
+ out.push("Aujourd’hui, "+p.name+" a "+feed.length+" repas enregistré(s), "+diap.length+" change(s) et "+sleep.length+" période(s) de sommeil.");
+ if(sleepMin)out.push("Sommeil enregistré aujourd’hui : "+formatDuration(sleepMin)+".");
+ const lf=lastEvent("feeding"); if(lf)out.push("Dernier repas : "+(lf.note||lf.feedType||"repas")+" à "+new Date(lf.ts).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})+".");
+ const ap=upcomingAppointments()[0]; if(ap)out.push("Prochain rendez-vous : "+ap.title+" le "+new Date(ap.date).toLocaleString()+".");
+ const vv=upcomingVaccines()[0]; if(vv)out.push("Prochain vaccin/rappel enregistré : "+vv.name+(vv.date?" le "+new Date(vv.date+"T00:00:00").toLocaleDateString():"")+".");
+ if(dueReminders().length)out.push(dueReminders().length+" rappel(s) sont actuellement dus.");
+ const lastG=state.growth.filter(x=>x.profileId===state.activeProfileId).sort((a,b)=>new Date(b.ts)-new Date(a.ts))[0];if(lastG)out.push("Dernière mesure : "+(lastG.weight||"—")+" kg, "+(lastG.height||"—")+" cm.");
+ return out
+}
+function renderSmartSummary(){
+ const items=buildSmartSummary();
+ const feed7=weeklyCounts("feeding").reduce((a,b)=>a+b,0),diap7=weeklyCounts("diapers").reduce((a,b)=>a+b,0),sleep7=weeklySleepMinutes().reduce((a,b)=>a+b,0);
+ root.innerHTML='<main class="screen">'+header("Résumé intelligent","NAËL")+
+ '<div class="summaryHero card"><div class="eyebrow">AUJOURD’HUI</div><h2>Votre journée en un coup d’œil</h2><p class="subtitle">Résumé généré uniquement à partir des données saisies dans Naël.</p></div>'+
+ '<div class="summaryList card">'+items.map(x=>'<div class="summaryBullet"><span>✦</span><div>'+esc(x)+'</div></div>').join("")+'</div>'+
+ '<h2 class="sectionTitle">7 derniers jours</h2><div class="weekCards"><div class="weekCard card"><b>'+feed7+'</b><small>repas</small></div><div class="weekCard card"><b>'+diap7+'</b><small>changes</small></div><div class="weekCard card"><b>'+formatDuration(sleep7)+'</b><small>sommeil saisi</small></div><div class="weekCard card"><b>'+state.milestones.filter(x=>x.profileId===state.activeProfileId).length+'</b><small>jalons</small></div></div>'+
+ '</main>'
+}
+
+
+function connectionStatus(){return {ai:!!state.connected.aiEndpoint,cloud:!!state.connected.cloudEndpoint}}
+function ensureFamilyCode(){
+ if(!state.connected.familyCode){
+  state.connected.familyCode="NAEL-"+Math.random().toString(36).slice(2,8).toUpperCase();
+  save()
+ }
+}
+function renderCloud(){
+ ensureFamilyCode();
+ const st=connectionStatus();
+
+ const accountBlock=!sb?
+ '<div class="authCard card"><div class="eyebrow">COMPTE CLOUD</div><h2>Connexion indisponible</h2><p class="smallNote">Le client cloud n’est pas chargé. Naël reste utilisable en local.</p></div>':
+ (!currentSession?
+ '<div class="authCard card"><div class="eyebrow">COMPTE CLOUD</div><h2>Se connecter à Naël</h2><p class="smallNote">Utilise le même compte sur tes différents appareils pour retrouver ta famille et tes données.</p><div class="field"><label>Email</label><input id="authEmail" type="email" autocomplete="email" placeholder="vous@email.com"></div><div class="field"><label>Mot de passe</label><input id="authPassword" type="password" autocomplete="current-password" minlength="6" placeholder="Votre mot de passe"></div><button class="btn primary fullBtn" onclick="signInCloud()">Se connecter</button><div class="authDivider"><span>ou</span></div><button class="btn secondary fullBtn" onclick="signUpCloud()">Créer un compte Naël</button><p class="smallNote">Une confirmation par email peut être demandée lors de la création du compte.</p></div>':
+ '<div class="authCard card"><div class="eyebrow">COMPTE CLOUD</div><h2>Vous êtes connecté</h2><div class="accountMain"><div class="accountAvatar">☁️</div><div><b>'+esc(currentSession.user.email||"Compte Naël")+'</b><small>Compte synchronisé</small></div></div><div id="remoteFamilyInfo" class="smallNote">Chargement de votre famille…</div><div class="rowBtns" style="margin-top:14px"><button class="btn primary" onclick="syncNow()">'+tr("syncNow")+'</button><button class="btn secondary" onclick="signOutCloud()">'+tr("switchAccount")+'</button></div></div>');
+
+ root.innerHTML='<main class="screen">'+header("Cloud & famille","COMPTE & SYNCHRONISATION")+
+ '<div class="cloudIntro"><h2>Votre compte Naël</h2><p class="subtitle">Connexion, sauvegarde et partage familial au même endroit.</p><div class="moduleReady">Cloud & famille prêt</div></div>'+
+ accountBlock+
+ '<h2 class="sectionTitle">Synchronisation</h2>'+
+ '<div class="connectCard card"><div class="syncRow"><span><i class="statusDot '+(currentSession?'ok':'off')+'"></i>Compte cloud</span><b>'+(currentSession?'Connecté':'Non connecté')+'</b></div><div class="syncRow"><span><i class="statusDot '+((currentSession||st.ai)?'ok':'off')+'"></i>Naël AI</span><b>'+(currentSession?'OpenRouter gratuit':st.ai?'Endpoint':'Local')+'</b></div><div class="syncRow"><span>Synchronisation auto</span><button class="toggle '+(state.connected.syncEnabled?'on':'')+'" onclick="toggleSync()"><i></i></button></div></div>'+
+ '<h2 class="sectionTitle">Famille</h2><div class="connectCard card"><div class="field"><label>Rejoindre une famille avec un code</label><input id="joinFamilyCode" placeholder="CODE FAMILLE"></div><button class="btn secondary" onclick="joinFamily()">Rejoindre</button><div id="familyCodeRemote" class="smallNote" style="margin-top:12px">'+(state.connected.familyCode?'Code famille : '+esc(state.connected.familyCode):'')+'</div></div>'+
+ '<h2 class="sectionTitle">Naël AI</h2><div class="connectCard card"><div class="field"><label>Endpoint IA sécurisé</label><input id="aiEndpoint" placeholder="https://.../api/nael-ai" value="'+esc(state.connected.aiEndpoint||'')+'"></div><div class="rowBtns"><button class="btn secondary" onclick="saveAIEndpoint()">Enregistrer</button><button class="btn secondary" onclick="testAIBackend()">Tester Naël AI</button></div><p class="secureNote">Aucune clé secrète n’est stockée dans le navigateur.</p></div>'+
+ '</main>';
+
+ if(currentSession)setTimeout(refreshRemoteFamilyInfo,0)
+}
+async function remoteAI(question){
+ const payload={
+  question,
+  profile:Object.assign({},activeProfile()||{},{ageText:ageTextForAI(activeProfile())}),
+  context:buildAIContext()
+ };
+ if(sb&&currentSession){
+  try{
+   const {data,error}=await sb.functions.invoke("nael-ai",{body:payload});
+   if(!error&&data?.answer)return data;
+  }catch(e){console.error("Naël AI cloud",e)}
+ }
+ if(state.connected.aiEndpoint){
+  try{
+   const r=await fetch(state.connected.aiEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+   if(!r.ok)throw new Error("HTTP "+r.status);
+   const data=await r.json();
+   if(data?.answer)return data
+  }catch(e){console.error("Naël AI endpoint",e)}
+ }
+ return null
+}
+function serializableState(){
+ const copy=JSON.parse(JSON.stringify(normalizeState(state)));
+ copy.photoDraft=null;
+ ["stage","screen","module","moduleParent","editingProfileId","avatarDraft","quickOpen"].forEach(k=>delete copy[k]);
+ return copy
+}
+function mergeById(a,b){
+ const m=new Map();
+ [...(a||[]),...(b||[])].forEach(x=>{if(x&&x.id)m.set(x.id,x)});
+ return [...m.values()]
+}
+function mergeStates(remote,local){
+ const out=Object.assign({},defaultState,remote||{},local||{});
+ ["profiles","events","appointments","vaccines","growth","milestones","reminders","documents","memories","medications","activityLog","routines","trips","travelItems"].forEach(k=>out[k]=mergeById((remote||{})[k],(local||{})[k]));
+ out.checklists=Object.assign({},(remote||{}).checklists||{},(local||{}).checklists||{});
+ out.connected=Object.assign({},(remote||{}).connected||{},(local||{}).connected||{});
+ const ui=["stage","screen","module","moduleParent","editingProfileId","avatarDraft","quickOpen","nightMode"];
+ ui.forEach(k=>{if(local && Object.prototype.hasOwnProperty.call(local,k))out[k]=local[k]});
+ return normalizeState(out)
+}
+
+async function loadFamilyMembers(){
+ if(!sb||!currentSession)return [];
+ try{
+  const fam=await ensureRemoteFamily();
+  const {data,error}=await sb.from("family_members").select("user_id,role,created_at").eq("family_id",fam.id).order("created_at",{ascending:true});
+  if(error)throw error;
+  const ownerRow={user_id:fam.owner_id,role:"owner",created_at:fam.created_at};
+  const rows=[ownerRow,...(data||[]).filter(x=>x.user_id!==fam.owner_id)];
+  state.connected.members=rows;
+  localStorage.setItem("nael.state.v4",JSON.stringify(state));
+  return rows
+ }catch(e){console.error("family members",e);return state.connected?.members||[]}
+}
+function familyRoleLabel(role){
+ return ({owner:"Propriétaire",parent:"Parent",guardian:"Tuteur",family:"Famille",read_only:"Lecture seule"})[role]||role||"Membre"
+}
+function copyFamilyCode(){
+ const code=remoteFamily?.invite_code||state.connected?.familyCode||"";
+ if(!code){toast("Aucun code famille");return}
+ navigator.clipboard?.writeText(code).then(()=>toast("Code famille copié ✓")).catch(()=>toast("Code : "+code))
+}
+async function subscribeFamilyRealtime(){
+ state.connected.realtime=false;
+}
+async function ensureRemoteFamily(){
+ if(!sb||!currentSession)return null;
+ if(remoteFamily)return remoteFamily;
+ const preferred=state.connected.familyId;
+ if(preferred){
+  const {data}=await sb.from("families").select("*").eq("id",preferred).maybeSingle();
+  if(data){remoteFamily=data;return data}
+ }
+ let {data,error}=await sb.from("families").select("*").order("created_at",{ascending:true}).limit(1).maybeSingle();
+ if(error)throw error;
+ if(!data){
+  const ins=await sb.from("families").insert({owner_id:currentSession.user.id,name:"Ma famille Naël"}).select().single();
+  if(ins.error)throw ins.error;
+  data=ins.data;
+  const mem=await sb.from("family_members").upsert({family_id:data.id,user_id:currentSession.user.id,role:"owner"},{onConflict:"family_id,user_id"});
+  if(mem.error)throw mem.error;
+ }
+ remoteFamily=data;
+ state.connected.familyId=data.id;
+ state.connected.familyCode=data.invite_code;
+ save();
+ return data
+}
+async function refreshRemoteFamilyInfo(){
+ try{
+  const fam=await ensureRemoteFamily();
+  const el=document.getElementById("remoteFamilyInfo");
+  const codeEl=document.getElementById("familyCodeRemote");
+  if(el)el.innerHTML="Famille : <b>"+esc(fam.name)+"</b> • code <b>"+esc(fam.invite_code)+"</b>";
+  if(codeEl)codeEl.innerHTML="Code de partage : <b>"+esc(fam.invite_code)+"</b>";
+ }catch(e){
+  const el=document.getElementById("remoteFamilyInfo");if(el)el.textContent="Impossible de charger la famille."
+ }
+}
+async function syncNow(silent=false){
+ assertLocalNavigation("before-sync");
+ if(syncInProgress)return;
+ if(!sb||!currentSession){if(!silent)toast("Connecte-toi d’abord");return}
+ syncInProgress=true;
+ try{
+  const fam=await ensureRemoteFamily();
+  const {data:remoteRow,error:readError}=await sb.from("family_state").select("state,updated_at").eq("family_id",fam.id).maybeSingle();
+  if(readError)throw readError;
+  // Merge cloud data with the FULL current device state so local navigation survives.
+  const merged=mergeStates(remoteRow?.state||{},state);
+  merged.connected=Object.assign({},merged.connected||{},{familyId:fam.id,familyCode:fam.invite_code,lastSync:new Date().toISOString()});
+
+  // Upload only shareable family data; never upload local navigation/UI.
+  const cloudState=serializableState(merged);
+  const {error:writeError}=await sb.from("family_state").upsert({family_id:fam.id,state:cloudState,updated_by:currentSession.user.id,updated_at:new Date().toISOString()},{onConflict:"family_id"});
+  if(writeError)throw writeError;
+
+  // Keep the full merged state on this device, including screen/module/moduleParent.
+  state=normalizeState(merged);
+  assertLocalNavigation("after-sync");
+  localStorage.setItem("nael.state.v4",JSON.stringify(state));
+  if(!silent)toast("Cloud synchronisé ✓");
+  if(state.module==="cloud"&&!silent)renderCloud()
+ }catch(e){
+  console.error(e);if(!silent)toast("Synchronisation impossible — données locales conservées")
+ }finally{syncInProgress=false}
+}
+
+
+function medicationHistory(){
+ const arr=state.medications.filter(x=>x.profileId===state.activeProfileId).slice().sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+ return arr.length?arr.map(m=>'<div class="list card"><div class="li">💊</div><div style="flex:1"><h3>'+esc(m.name)+'</h3><p>'+esc(m.schedule||"")+(m.prescriber?' • '+esc(m.prescriber):'')+'</p><p class="muted">'+esc(m.note||"")+'</p><div class="profileActions"><button class="btn success mini" data-id="'+m.id+'" onclick="logMedicationTake(this.dataset.id)">Prise maintenant</button><button class="btn danger mini" data-id="'+m.id+'" onclick="deleteMedication(this.dataset.id)">Supprimer</button></div></div></div>').join(""):'<div class="empty card">Aucun traitement enregistré.</div>'
+}
+function lastHealthNotes(limit=8){
+ return state.events.filter(e=>e.profileId===state.activeProfileId&&e.type==="healthlog").slice(-limit).reverse()
+}
+function latestGrowth(){
+ return state.growth.filter(x=>x.profileId===state.activeProfileId).sort((a,b)=>new Date(b.ts)-new Date(a.ts))[0]||null
+}
+function doctorPackData(){
+ const p=activeProfile(),g=latestGrowth();
+ return {
+  profile:p,
+  growth:g,
+  vaccines:state.vaccines.filter(x=>x.profileId===state.activeProfileId).slice(-12),
+  appointments:state.appointments.filter(x=>x.profileId===state.activeProfileId).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(-8),
+  notes:lastHealthNotes(10),
+  medications:state.medications.filter(x=>x.profileId===state.activeProfileId).slice(-10),
+  reminders:state.reminders.filter(x=>x.profileId===state.activeProfileId&&!x.done).slice(0,10)
+ }
+}
+function doctorPackHtml(){
+ const d=doctorPackData(),p=d.profile||{};
+ const rows=(items,fn)=>items.length?items.map(fn).join(""):'<p class="muted">Aucune donnée.</p>';
+ return '<div class="reportSheet"><h1>Naël — Pack consultation</h1><p>Généré le '+new Date().toLocaleString()+'</p>'+
+ '<h2>Profil</h2><p><b>'+esc(p.name||"Enfant")+'</b> • '+esc(p.birth?ageText(p.birth):"âge non renseigné")+'</p>'+
+ '<p><b>Allergies / infos importantes :</b> '+esc(p.allergies||"Non renseigné")+'</p><p><b>Médecin :</b> '+esc(p.doctor||"Non renseigné")+'</p>'+
+ '<h2>Dernière croissance</h2>'+(d.growth?'<p>'+esc(d.growth.weight||"—")+' kg • '+esc(d.growth.height||"—")+' cm • '+new Date(d.growth.ts).toLocaleDateString()+'</p>':'<p class="muted">Aucune mesure.</p>')+
+ '<h2>Traitements</h2>'+rows(d.medications,m=>'<p>• <b>'+esc(m.name)+'</b> — '+esc(m.schedule||"")+(m.note?' — '+esc(m.note):'')+'</p>')+
+ '<h2>Vaccins</h2>'+rows(d.vaccines,v=>'<p>• '+esc(v.name)+' — '+esc(v.date||"date non définie")+' — '+esc(v.status||"")+'</p>')+
+ '<h2>Rendez-vous</h2>'+rows(d.appointments,a=>'<p>• '+esc(a.title)+' — '+new Date(a.date).toLocaleString()+(a.note?' — '+esc(a.note):'')+'</p>')+
+ '<h2>Observations santé récentes</h2>'+rows(d.notes,n=>'<p>• '+new Date(n.ts).toLocaleString()+' — '+esc(n.note||"")+'</p>')+
+ '<p class="reportDisclaimer">Document d’organisation familiale. Il ne remplace pas le dossier médical ni l’avis d’un professionnel de santé.</p></div>'
+}
+function renderEmergencyCard(){
+ const p=activeProfile()||{},meds=state.medications.filter(x=>x.profileId===state.activeProfileId);
+ root.innerHTML='<main class="screen">'+header("Fiche urgence","ACCÈS RAPIDE")+
+ '<div class="emergencyCard card"><div class="eyebrow">INFORMATIONS ESSENTIELLES</div><h2>'+esc(p.name||"Enfant")+'</h2><p>'+esc(p.birth?ageText(p.birth):"Âge non renseigné")+'</p><div class="alertLine"><b>Allergies / informations importantes</b><span>'+esc(p.allergies||"Aucune information renseignée")+'</span></div><div class="alertLine"><b>Médecin</b><span>'+esc(p.doctor||"Non renseigné")+'</span></div><div class="alertLine"><b>Traitements enregistrés</b><span>'+(meds.length?meds.map(m=>esc(m.name)).join(", "):"Aucun")+'</span></div></div>'+
+ '<div class="notice">En urgence vitale en France : 15 ou 112. Cette fiche sert uniquement à retrouver rapidement les informations que vous avez saisies.</div>'+
+ '<button class="btn primary" onclick="window.print()">Imprimer / enregistrer en PDF</button></main>'
+}
+function renderDoctorPack(){
+ root.innerHTML='<main class="screen">'+header("Pack médecin","CONSULTATION")+
+ '<div class="notice">Un résumé pratique des informations enregistrées dans Naël avant une consultation.</div>'+
+ doctorPackHtml()+
+ '<div class="profileActions"><button class="btn primary" onclick="window.print()">Imprimer / PDF</button><button class="btn secondary" onclick="copyDoctorPack()">Copier le résumé</button></div></main>'
+}
+
+const activityCatalog=[
+ {min:0,max:2,cat:"Lien",title:"Peau à peau calme",desc:"Moment calme, voix douce et contact rassurant.",minutes:10},
+ {min:0,max:3,cat:"Vision",title:"Contrastes noir & blanc",desc:"Présenter lentement des formes très contrastées à courte distance.",minutes:5},
+ {min:1,max:4,cat:"Motricité",title:"Temps sur le ventre",desc:"Quelques minutes éveillé et surveillé, selon la tolérance de bébé.",minutes:3},
+ {min:2,max:5,cat:"Langage",title:"Conversation face à face",desc:"Parler doucement, imiter les sons et laisser des pauses pour répondre.",minutes:10},
+ {min:3,max:6,cat:"Motricité",title:"Attraper un objet léger",desc:"Proposer un objet sûr et léger à portée des mains.",minutes:8},
+ {min:4,max:8,cat:"Sensoriel",title:"Explorer des textures",desc:"Faire toucher plusieurs tissus doux et sûrs sous surveillance.",minutes:10},
+ {min:5,max:9,cat:"Jeu",title:"Coucou-caché",desc:"Jouer à apparaître et disparaître avec les mains ou un tissu léger.",minutes:5},
+ {min:6,max:12,cat:"Motricité",title:"Objets à transférer",desc:"Passer un objet sûr d’une main à l’autre.",minutes:10},
+ {min:7,max:12,cat:"Langage",title:"Nommer les objets",desc:"Nommer simplement les objets du quotidien en les montrant.",minutes:10},
+ {min:8,max:15,cat:"Jeu",title:"Boîte à trésors sûre",desc:"Explorer quelques objets du quotidien sûrs, grands et non coupants.",minutes:15},
+ {min:10,max:18,cat:"Motricité",title:"Parcours coussins",desc:"Petit parcours au sol avec coussins stables et surveillance constante.",minutes:10},
+ {min:12,max:24,cat:"Langage",title:"Livre d’images",desc:"Nommer les images, laisser l’enfant pointer et tourner les pages.",minutes:15},
+ {min:12,max:30,cat:"Autonomie",title:"Ranger ensemble",desc:"Mettre quelques jouets dans une boîte en nommant l’action.",minutes:5},
+ {min:18,max:36,cat:"Créativité",title:"Dessin libre",desc:"Crayons adaptés, grande feuille et exploration sans objectif précis.",minutes:15},
+ {min:18,max:36,cat:"Imitation",title:"Jeu symbolique",desc:"Faire semblant de cuisiner, téléphoner ou coucher une poupée.",minutes:15}
+];
+
+const milestoneGuide=[
+ {m:2,t:"Regarde les visages et réagit aux sons"},
+ {m:4,t:"Sourit, vocalise et tient mieux sa tête"},
+ {m:6,t:"Explore avec les mains et porte des objets à la bouche"},
+ {m:9,t:"S’assoit avec plus d’assurance et interagit davantage"},
+ {m:12,t:"Gestes sociaux, déplacements et compréhension de mots simples"},
+ {m:18,t:"Imitation, premiers mots plus variés et exploration autonome"},
+ {m:24,t:"Combinaisons de mots, jeu symbolique et autonomie croissante"},
+ {m:36,t:"Langage plus riche, jeu avec les autres et motricité affinée"}
+];
+
+function profileAgeMonths(p=activeProfile()){
+ if(!p?.birth)return null;
+ const b=new Date(p.birth+"T00:00:00"),n=new Date();
+ let m=(n.getFullYear()-b.getFullYear())*12+(n.getMonth()-b.getMonth());
+ if(n.getDate()<b.getDate())m--;
+ return Math.max(0,m)
+}
+function recommendedActivities(){
+ const m=profileAgeMonths();
+ if(m===null)return activityCatalog.slice(0,6);
+ let arr=activityCatalog.filter(a=>m>=a.min&&m<=a.max);
+ if(arr.length<5){
+  arr=[...arr,...activityCatalog.filter(a=>Math.abs(((a.min+a.max)/2)-m)<=5&&!arr.includes(a))];
+ }
+ return arr.slice(0,8)
+}
+function activityStatus(title){
+ const logs=state.activityLog.filter(x=>x.profileId===state.activeProfileId&&x.title===title).sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+ return logs[0]?.status||null
+}
+function renderActivities(){
+ const age=profileAgeMonths(),arr=recommendedActivities();
+ root.innerHTML='<main class="screen">'+header("Activités","ÉVEIL & JEU")+
+ '<div class="notice">Suggestions générales adaptées à l’âge renseigné. Elles ne constituent pas une évaluation du développement. Toujours adapter à l’enfant et surveiller les activités.</div>'+
+ '<div class="card"><div class="eyebrow">ÂGE ESTIMÉ</div><h2>'+(age===null?'À renseigner':age+' mois')+'</h2><p class="muted">'+esc(activeProfile()?.name||"Enfant")+'</p></div>'+
+ '<h2 class="sectionTitle">Idées pour maintenant</h2><div class="activityGrid">'+arr.map(a=>{
+   const st=activityStatus(a.title);
+   return '<div class="activityCard card"><span class="badgeSoft">'+esc(a.cat)+'</span><h3>'+esc(a.title)+'</h3><p>'+esc(a.desc)+'</p><div class="docMeta">≈ '+a.minutes+' min</div><div class="profileActions"><button class="btn secondary mini" data-title="'+esc(a.title)+'" data-status="tried" onclick="logActivity(this.dataset.title,this.dataset.status)">'+(st==="tried"?"✓ Essayé":"Essayé")+'</button><button class="btn success mini" data-title="'+esc(a.title)+'" data-status="loved" onclick="logActivity(this.dataset.title,this.dataset.status)">'+(st==="loved"?"★ Adoré":"Adoré")+'</button></div></div>'
+  }).join("")+'</div>'+
+ '<h2 class="sectionTitle">Historique récent</h2>'+activityHistoryHtml()+'</main>'
+}
+function activityHistoryHtml(){
+ const arr=state.activityLog.filter(x=>x.profileId===state.activeProfileId).slice().reverse().slice(0,12);
+ return arr.length?arr.map(x=>'<div class="list card"><div class="li">'+(x.status==="loved"?"⭐":"🧸")+'</div><div><h3>'+esc(x.title)+'</h3><p>'+new Date(x.ts).toLocaleString()+' • '+(x.status==="loved"?"Adoré":"Essayé")+'</p></div></div>').join(""):'<div class="empty card">Aucune activité enregistrée.</div>'
+}
+function renderDevelopment(){
+ const m=profileAgeMonths();
+ const saved=state.milestones.filter(x=>x.profileId===state.activeProfileId).slice().sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+ root.innerHTML='<main class="screen">'+header("Développement","PROGRÈS")+
+ '<div class="notice">Les âges ci-dessous sont des repères larges, pas des délais à atteindre. Le développement varie beaucoup d’un enfant à l’autre.</div>'+
+ '<div class="card"><div class="eyebrow">REPÈRES GÉNÉRAUX</div>'+milestoneGuide.map(g=>'<div class="syncRow"><span>'+g.m+' mois</span><b>'+esc(g.t)+'</b></div>').join("")+'</div>'+
+ '<h2 class="sectionTitle">Ajouter un progrès observé</h2><div class="field"><label>Progrès / nouvelle capacité</label><input id="devTitle" placeholder="Ex : se retourne seul"></div><div class="field"><label>Note</label><textarea id="devNote" placeholder="Contexte, date, détail…"></textarea></div>'+btn("Ajouter au journal","addDevelopment()")+
+ '<h2 class="sectionTitle">Journal de '+esc(activeProfile()?.name||"l’enfant")+'</h2>'+(saved.length?saved.map(x=>'<div class="list card"><div class="li">🌱</div><div><h3>'+esc(x.title)+'</h3><p>'+new Date(x.ts).toLocaleDateString()+'</p><p class="muted">'+esc(x.note||"")+'</p></div></div>').join(""):'<div class="empty card">Aucun progrès enregistré.</div>')+
+ '</main>'
+}
+function renderRoutines(){
+ const arr=state.routines.filter(x=>x.profileId===state.activeProfileId).slice().sort((a,b)=>(a.time||"").localeCompare(b.time||""));
+ root.innerHTML='<main class="screen">'+header("Routines","QUOTIDIEN")+
+ '<div class="notice">Crée des repères simples : sommeil, repas, bain, sortie, lecture… sans chercher une rigidité parfaite.</div>'+
+ '<div class="field"><label>Routine</label><input id="routineTitle" placeholder="Ex : rituel du coucher"></div><div class="field"><label>Heure indicative</label><input id="routineTime" type="time"></div><div class="field"><label>Note</label><textarea id="routineNote" placeholder="Ex : bain, pyjama, histoire, lumière douce"></textarea></div>'+btn("Ajouter la routine","addRoutine()")+
+ '<h2 class="sectionTitle">Mes routines</h2>'+(arr.length?arr.map(r=>'<div class="list card"><div class="li">✨</div><div style="flex:1"><h3>'+esc(r.title)+'</h3><p>'+(r.time?esc(r.time):"Horaire libre")+'</p><p class="muted">'+esc(r.note||"")+'</p><button class="btn danger mini" data-id="'+r.id+'" onclick="deleteRoutine(this.dataset.id)">Supprimer</button></div></div>').join(""):'<div class="empty card">Aucune routine.</div>')+
+ '</main>'
+}
+
+const baseTravelItems=[
+ {cat:"Essentiels",title:"Couches",min:0,max:36},
+ {cat:"Essentiels",title:"Lingettes / coton",min:0,max:36},
+ {cat:"Essentiels",title:"Tenue de rechange",min:0,max:36},
+ {cat:"Essentiels",title:"Bavoir",min:0,max:24},
+ {cat:"Essentiels",title:"Sac pour vêtements sales",min:0,max:36},
+ {cat:"Repas",title:"Biberon / eau selon habitudes",min:0,max:36},
+ {cat:"Repas",title:"Lait / repas habituels",min:0,max:36},
+ {cat:"Repas",title:"Cuillère / petit contenant",min:5,max:36},
+ {cat:"Sommeil",title:"Gigoteuse / pyjama habituel",min:0,max:36},
+ {cat:"Sommeil",title:"Doudou si utilisé",min:3,max:36},
+ {cat:"Santé",title:"Carnet de santé / documents utiles",min:0,max:36},
+ {cat:"Santé",title:"Traitements prescrits en cours",min:0,max:36},
+ {cat:"Santé",title:"Thermomètre",min:0,max:36},
+ {cat:"Sortie",title:"Poussette ou porte-bébé",min:0,max:24},
+ {cat:"Sortie",title:"Protection météo adaptée",min:0,max:36},
+ {cat:"Jeu",title:"Petit jouet familier",min:2,max:36},
+ {cat:"Jeu",title:"Livre / activité calme",min:6,max:36}
+];
+
+function tripItemsForAge(){
+ const m=profileAgeMonths();
+ return baseTravelItems.filter(x=>m===null||(m>=x.min&&m<=x.max))
+}
+function ensureTravelDefaults(){
+ const pid=state.activeProfileId;
+ const existing=state.travelItems.filter(x=>x.profileId===pid&&x.source==="default");
+ if(existing.length)return;
+ tripItemsForAge().forEach(x=>state.travelItems.push({
+  id:uid(),profileId:pid,source:"default",cat:x.cat,title:x.title,done:false,ts:new Date().toISOString()
+ }));
+ localStorage.setItem("nael.state.v4",JSON.stringify(state))
+}
+function travelProgress(){
+ const arr=state.travelItems.filter(x=>x.profileId===state.activeProfileId);
+ if(!arr.length)return 0;
+ return Math.round(arr.filter(x=>x.done).length/arr.length*100)
+}
+function renderTravelPack(){
+ ensureTravelDefaults();
+ const arr=state.travelItems.filter(x=>x.profileId===state.activeProfileId);
+ const cats=[...new Set(arr.map(x=>x.cat))];
+ root.innerHTML='<main class="screen">'+header("Sac bébé","PRÊT À PARTIR")+
+ '<div class="travelHero card"><div class="eyebrow">CHECKLIST</div><h2>'+travelProgress()+'% prêt</h2><div class="progressTrack"><span style="width:'+travelProgress()+'%"></span></div><p class="muted">Checklist liée à '+esc(activeProfile()?.name||"l’enfant")+'.</p></div>'+
+ '<div class="field"><label>Ajouter un élément</label><input id="travelNewItem" placeholder="Ex : crème solaire adaptée"></div><div class="field"><label>Catégorie</label><select id="travelNewCat"><option>Essentiels</option><option>Repas</option><option>Sommeil</option><option>Santé</option><option>Sortie</option><option>Jeu</option><option>Autre</option></select></div>'+btn("Ajouter","addTravelItem()")+
+ cats.map(cat=>'<h2 class="sectionTitle">'+esc(cat)+'</h2><div class="checkList">'+arr.filter(x=>x.cat===cat).map(i=>'<label class="checkRow card"><input type="checkbox" '+(i.done?'checked':'')+' data-id="'+i.id+'" onchange="toggleTravelItem(this.dataset.id,this.checked)"><span>'+esc(i.title)+'</span><button type="button" class="iconBtn" data-id="'+i.id+'" onclick="event.preventDefault();deleteTravelItem(this.dataset.id)">×</button></label>').join("")+'</div>').join("")+
+ '<div class="profileActions"><button class="btn secondary" onclick="resetTravelPack()">Réinitialiser</button><button class="btn primary" onclick="markTravelReady()">Tout est prêt ✓</button></div></main>'
+}
+function renderTravel(){
+ const trips=state.trips.filter(x=>x.profileId===state.activeProfileId).slice().sort((a,b)=>new Date(b.departure||b.ts)-new Date(a.departure||a.ts));
+ root.innerHTML='<main class="screen">'+header("Voyage & sorties","ORGANISATION")+
+ '<div class="notice">Organise les informations pratiques d’un déplacement. Naël ne remplace pas les consignes officielles de transport, santé ou sécurité.</div>'+
+ '<div class="field"><label>Nom du voyage / sortie</label><input id="tripTitle" placeholder="Ex : week-end chez les grands-parents"></div>'+
+ '<div class="field"><label>Destination</label><input id="tripDestination" placeholder="Ville / lieu"></div>'+
+ '<div class="field"><label>Départ</label><input id="tripDeparture" type="datetime-local"></div>'+
+ '<div class="field"><label>Retour</label><input id="tripReturn" type="datetime-local"></div>'+
+ '<div class="field"><label>Transport</label><select id="tripTransport"><option>Voiture</option><option>Train</option><option>Avion</option><option>Bus</option><option>À pied</option><option>Autre</option></select></div>'+
+ '<div class="field"><label>Hébergement / adresse</label><input id="tripStay" placeholder="Hôtel, famille, location…"></div>'+
+ '<div class="field"><label>Notes</label><textarea id="tripNotes" placeholder="Horaires, besoins bébé, parking, repas…"></textarea></div>'+btn("Enregistrer le voyage","addTrip()")+
+ '<div class="profileActions"><button class="btn secondary" onclick="openMod(this.dataset.target)" data-target="travelpack">Préparer le sac bébé</button><button class="btn secondary" onclick="openMod(this.dataset.target)" data-target="emergency">Voir fiche urgence</button></div>'+
+ '<h2 class="sectionTitle">Voyages enregistrés</h2>'+(trips.length?trips.map(t=>'<div class="tripCard card"><span class="badgeSoft">'+esc(t.transport||"Voyage")+'</span><h3>'+esc(t.title)+'</h3><p>'+esc(t.destination||"Destination non renseignée")+'</p><div class="docMeta">'+(t.departure?new Date(t.departure).toLocaleString():"Départ non défini")+(t.returnAt?' → '+new Date(t.returnAt).toLocaleString():'')+'</div>'+(t.stay?'<p><b>Hébergement :</b> '+esc(t.stay)+'</p>':'')+(t.notes?'<p class="muted">'+esc(t.notes)+'</p>':'')+'<div class="profileActions"><button class="btn secondary mini" data-id="'+t.id+'" onclick="copyTripSummary(this.dataset.id)">Copier résumé</button><button class="btn danger mini" data-id="'+t.id+'" onclick="deleteTrip(this.dataset.id)">Supprimer</button></div></div>').join(""):'<div class="empty card">Aucun voyage enregistré.</div>')+
+ '</main>'
+}
+
+function renderHealthLog(){
+ const arr=(state.events||[]).filter(e=>e&&e.profileId===state.activeProfileId&&e.type==="healthlog").slice().sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+ root.innerHTML='<main class="screen">'+header("Carnet santé","OBSERVATIONS")+
+ '<div class="notice">Note simplement les observations utiles. Ce carnet ne remplace pas un avis médical.</div>'+
+ '<div class="field"><label>Observation</label><textarea id="healthLogNote" placeholder="Ex : température, comportement, conseil du médecin…"></textarea></div>'+
+ '<button class="btn primary" onclick="addHealthLog()">Ajouter</button>'+
+ '<h2 class="sectionTitle">Historique</h2>'+
+ (arr.length?arr.map(x=>'<div class="list card"><div class="li">❤️</div><div><h3>'+new Date(x.ts).toLocaleString()+'</h3><p>'+esc(x.note||"")+'</p></div></div>').join(""):'<div class="empty card">Aucune observation enregistrée.</div>')+
+ '</main>'
+}
+
+function renderJournal(){
+ const arr=(state.events||[]).filter(e=>e&&e.profileId===state.activeProfileId&&e.type==="journal").slice().sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+ root.innerHTML='<main class="screen">'+header("Journal","VOTRE QUOTIDIEN")+
+ '<div class="field"><label>Note du jour</label><textarea id="journalNote" placeholder="Un souvenir, une émotion, une petite victoire…"></textarea></div>'+
+ '<button class="btn primary" onclick="addJournalEntry()">Ajouter au journal</button>'+
+ '<h2 class="sectionTitle">Entrées récentes</h2>'+
+ (arr.length?arr.map(x=>'<div class="list card"><div class="li">📖</div><div><h3>'+new Date(x.ts).toLocaleString()+'</h3><p>'+esc(x.note||"")+'</p></div></div>').join(""):'<div class="empty card">Le journal est encore vide.</div>')+
+ '</main>'
+}
+
+function renderCalendar(){
+ const pid=state.activeProfileId;
+ const ap=(state.appointments||[]).filter(x=>x&&x.profileId===pid).slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+ const rm=(state.reminders||[]).filter(x=>x&&x.profileId===pid&&!x.done).slice().sort((a,b)=>new Date(a.when)-new Date(b.when));
+ const va=(state.vaccines||[]).filter(x=>x&&x.profileId===pid&&x.status!=="done").slice().sort((a,b)=>(a.date||"9999").localeCompare(b.date||"9999"));
+ root.innerHTML='<main class="screen">'+header("Calendrier","AGENDA")+
+ '<div class="profileActions"><button class="btn primary" onclick="openMod(\'appointments\')">Ajouter rendez-vous</button><button class="btn secondary" onclick="openMod(\'reminders\')">Ajouter rappel</button></div>'+
+ '<h2 class="sectionTitle">Rendez-vous</h2>'+
+ (ap.length?ap.slice(0,8).map(x=>'<div class="list card"><div class="li">📅</div><div><h3>'+esc(x.title||"Rendez-vous")+'</h3><p>'+new Date(x.date).toLocaleString()+'</p></div></div>').join(""):'<div class="empty card">Aucun rendez-vous.</div>')+
+ '<h2 class="sectionTitle">Rappels</h2>'+
+ (rm.length?rm.slice(0,8).map(x=>'<div class="list card"><div class="li">🔔</div><div><h3>'+esc(x.title||"Rappel")+'</h3><p>'+new Date(x.when).toLocaleString()+'</p></div></div>').join(""):'<div class="empty card">Aucun rappel.</div>')+
+ '<h2 class="sectionTitle">Vaccins à venir</h2>'+
+ (va.length?va.slice(0,8).map(x=>'<div class="list card"><div class="li">💉</div><div><h3>'+esc(x.name||"Vaccin")+'</h3><p>'+esc(x.date||"Date non définie")+'</p></div></div>').join(""):'<div class="empty card">Aucun vaccin à venir.</div>')+
+ '</main>'
+}
+
+function renderResearch(){
+ const items=(typeof trustedSources!=="undefined"&&Array.isArray(trustedSources))?trustedSources:[];
+ root.innerHTML='<main class="screen">'+header("Sources officielles","INFORMATIONS")+
+ '<div class="notice">Références générales utiles. Pour une décision médicale concernant votre enfant, confirmez toujours avec un professionnel de santé.</div>'+
+ '<div class="field"><label>Rechercher</label><input id="researchQuery" placeholder="Ex : sommeil, vaccin, fièvre"></div>'+
+ '<button class="btn primary" onclick="filterResearch()">Rechercher</button>'+
+ '<div id="researchResults" class="aiSourceList" style="margin-top:14px">'+researchSourcesHtml(items)+'</div></main>'
+}
+
+function researchSourcesHtml(items){
+ if(!items||!items.length)return '<div class="empty card">Aucune source disponible.</div>';
+ return items.map(x=>'<a class="aiSource" href="'+esc(x.url)+'" target="_blank" rel="noopener"><b>'+esc(x.title)+'</b><small>'+esc(x.org||"Source officielle")+' ↗</small></a>').join("")
+}
+
+function renderFeedingSafe(){
+ const arr=(state.events||[]).filter(e=>e&&e.profileId===state.activeProfileId&&e.type==="feeding").slice().sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+ root.innerHTML='<main class="screen">'+header("Repas","SUIVI")+
+ '<div class="field"><label>Type</label><select id="feedType"><option value="bottle">Biberon</option><option value="breast">Allaitement</option><option value="meal">Repas</option></select></div>'+
+ '<div class="field"><label>Quantité (ml, optionnel)</label><input id="feedAmount" type="number" min="0" step="1" placeholder="Ex : 120"></div>'+
+ '<div class="field"><label>Note</label><textarea id="feedNote" placeholder="Optionnel"></textarea></div>'+
+ '<button class="btn primary" onclick="addFeedingSafe()">Ajouter</button>'+
+ '<h2 class="sectionTitle">Historique récent</h2>'+
+ (arr.length?arr.slice(0,20).map(e=>'<div class="list card"><div class="li">🍼</div><div><h3>'+new Date(e.ts).toLocaleString()+'</h3><p>'+esc(e.subtype||"Repas")+(e.amountMl?' • '+esc(e.amountMl)+' ml':'')+(e.note?' • '+esc(e.note):'')+'</p></div></div>').join(""):'<div class="empty card">Aucun repas enregistré.</div>')+
+ '</main>'
+}
+
+function renderSleepSafe(){
+ const arr=(state.events||[]).filter(e=>e&&e.profileId===state.activeProfileId&&e.type==="sleep").slice().sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+ root.innerHTML='<main class="screen">'+header("Sommeil","SUIVI")+
+ '<div class="field"><label>Durée (minutes)</label><input id="sleepMinutes" type="number" min="1" step="1" placeholder="Ex : 90"></div>'+
+ '<div class="field"><label>Note</label><textarea id="sleepNote" placeholder="Sieste, nuit, réveils…"></textarea></div>'+
+ '<button class="btn primary" onclick="addSleepSafe()">Ajouter</button>'+
+ '<h2 class="sectionTitle">Historique récent</h2>'+
+ (arr.length?arr.slice(0,20).map(e=>'<div class="list card"><div class="li">🌙</div><div><h3>'+new Date(e.ts).toLocaleString()+'</h3><p>'+(e.durationMin?esc(e.durationMin)+' min':'Durée non précisée')+(e.note?' • '+esc(e.note):'')+'</p></div></div>').join(""):'<div class="empty card">Aucun sommeil enregistré.</div>')+
+ '</main>'
+}
+
+function renderDiapersSafe(){
+ const arr=(state.events||[]).filter(e=>e&&e.profileId===state.activeProfileId&&e.type==="diapers").slice().sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+ root.innerHTML='<main class="screen">'+header("Couche","SUIVI")+
+ '<div class="field"><label>Type</label><select id="diaperType"><option value="pee">Pipi</option><option value="poop">Selles</option><option value="both">Les deux</option></select></div>'+
+ '<div class="field"><label>Note</label><textarea id="diaperNote" placeholder="Optionnel"></textarea></div>'+
+ '<button class="btn primary" onclick="addDiaperSafe()">Ajouter</button>'+
+ '<h2 class="sectionTitle">Historique récent</h2>'+
+ (arr.length?arr.slice(0,20).map(e=>'<div class="list card"><div class="li">🧷</div><div><h3>'+new Date(e.ts).toLocaleString()+'</h3><p>'+esc(e.subtype||"Change")+(e.note?' • '+esc(e.note):'')+'</p></div></div>').join(""):'<div class="empty card">Aucun change enregistré.</div>')+
+ '</main>'
+}
+function renderModule(){
+ const k=state.module;
+ if(!k){state.screen="home";render();return}
+ try{
+  if(k==="ai"){renderAI();return}
+  if(k==="cloud"){renderCloud();return}
+  if(k==="research"){renderResearch();return}
+  if(k==="calendar"){renderCalendar();return}
+  if(k==="stats"){renderStats();return}
+  if(k==="summary"){renderSmartSummary();return}
+  if(k==="documents"){renderDocuments();return}
+  if(k==="checklists"){renderChecklists();return}
+  if(k==="memories"){renderMemoriesAlbum();return}
+  if(k==="feeding"){renderFeedingSafe();return}
+  if(k==="sleep"){renderSleepSafe();return}
+  if(k==="diapers"){renderDiapersSafe();return}
+  if(k==="healthlog"){renderHealthLog();return}
+  if(k==="journal"){renderJournal();return}
+  if(k==="travel"){renderTravel();return}
+  if(k==="travelpack"){renderTravelPack();return}
+  if(k==="activities"){renderActivities();return}
+  if(k==="development"){renderDevelopment();return}
+  if(k==="routines"){renderRoutines();return}
+  if(k==="emergency"){renderEmergencyCard();return}
+  if(k==="doctorpack"){renderDoctorPack();return}
+  if(k==="growth"){renderGrowthAdvanced();return}
+
+  if(!activeProfile()&&!["settings","research","cloud"].includes(k)){
+   toast("Crée d’abord un profil");state.module=null;state.screen="profile";render();return
+  }
+
+  if(k==="medications"){
+   root.innerHTML='<main class="screen">'+header("Traitements","SANTÉ")+'<div class="notice">Enregistre uniquement les traitements prescrits ou validés par un professionnel. Naël ne calcule pas de dose.</div><div class="field"><label>Nom du traitement</label><input id="medName" placeholder="Ex : traitement prescrit"></div><div class="field"><label>Fréquence / horaire</label><input id="medSchedule" placeholder="Ex : matin et soir"></div><div class="field"><label>Prescripteur</label><input id="medPrescriber" placeholder="Médecin / pédiatre"></div><div class="field"><label>Note</label><textarea id="medNote" placeholder="Consignes de l’ordonnance"></textarea></div>'+btn("Ajouter le traitement","addMedication()")+'<h2 class="sectionTitle">Traitements enregistrés</h2>'+medicationHistory()+'</main>';return
+  }
+
+  if(k==="appointments"){
+   root.innerHTML='<main class="screen">'+header("Rendez-vous","AGENDA")+'<div class="field"><label>Objet</label><input id="atitle" placeholder="Pédiatre"></div><div class="field"><label>Date et heure</label><input id="adate" type="datetime-local"></div><div class="field"><label>Rappel</label><select id="aremind"><option value="0">À l’heure</option><option value="120">2 h avant</option><option value="1440" selected>24 h avant</option><option value="2880">48 h avant</option></select></div><div class="field"><label>Notes</label><textarea id="anote"></textarea></div>'+btn("Ajouter le rendez-vous","addAppointment()")+'<h2 class="sectionTitle">À venir</h2>'+appointmentHistory()+'</main>';return
+  }
+
+  if(k==="vaccines"){
+   root.innerHTML='<main class="screen">'+header("Vaccins","SANTÉ")+'<div class="notice">Le calendrier dépend du pays et de la situation médicale. Confirmez toujours les dates avec votre professionnel de santé.</div><div class="field"><label>Vaccin / rappel</label><input id="vname" placeholder="Nom ou rappel"></div><div class="field"><label>Date prévue</label><input id="vdate" type="date"></div><div class="field"><label>Statut</label><select id="vstatus"><option value="todo">À faire</option><option value="done">Fait</option><option value="postponed">Reporté</option></select></div>'+btn("Ajouter","addVaccine()")+'<h2 class="sectionTitle">Calendrier</h2>'+vaccineHistory()+'</main>';return
+  }
+
+  if(k==="reminders"){
+   root.innerHTML='<main class="screen">'+header("Rappels","NOTIFICATIONS")+'<div class="field"><label>Titre</label><input id="rtitle" placeholder="Vitamine, rendez-vous, vaccin..."></div><div class="field"><label>Date et heure</label><input id="rwhen" type="datetime-local"></div>'+btn("Créer le rappel","addReminder()")+' <button class="btn secondary" onclick="enableNotifications()">Notifications locales</button> <button class="btn secondary" onclick="enablePush()">Activer push cloud</button> <button class="btn secondary" onclick="sendTestPush()">Tester push</button><h2 class="sectionTitle">Mes rappels</h2>'+reminderHistory()+'</main>';return
+  }
+
+  if(k==="milestones"){
+   root.innerHTML='<main class="screen">'+header("Premières fois","JALONS")+'<div class="field"><label>Moment</label><input id="mtitle" placeholder="Premier sourire"></div><div class="field"><label>Date</label><input id="mdate" type="date"></div>'+btn("Ajouter","addMilestone()")+'<h2 class="sectionTitle">Jalons</h2>'+milestoneHistory()+'</main>';return
+  }
+
+  if(k==="settings"){
+   root.innerHTML='<main class="screen">'+header(tr("settings"),tr("preferences").toUpperCase())+
+   '<h2 class="sectionTitle">'+tr("language")+'</h2>'+
+   '<div class="card languageCard"><p class="muted">'+tr("chooseLanguage")+'</p><div class="languageGrid">'+
+   '<button class="langBtn '+(state.language==="fr"?"active":"")+'" onclick="setLanguage(\'fr\')">🇫🇷 Français</button>'+
+   '<button class="langBtn '+(state.language==="en"?"active":"")+'" onclick="setLanguage(\'en\')">🇬🇧 English</button>'+
+   '<button class="langBtn '+(state.language==="ar"?"active":"")+'" onclick="setLanguage(\'ar\')">🇲🇦 العربية</button>'+
+   '<button class="langBtn '+(state.language==="es"?"active":"")+'" onclick="setLanguage(\'es\')">🇪🇸 Español</button>'+
+   '<button class="langBtn '+(state.language==="zh"?"active":"")+'" onclick="setLanguage(\'zh\')">🇨🇳 中文</button>'+
+   '</div></div>'+
+   '<h2 class="sectionTitle">'+tr("backup")+'</h2><div class="rowBtns">'+btn(tr("exportData"),"exportData()","secondary")+btn(tr("importData"),"triggerImport()","secondary")+'</div>'+
+   '<h2 class="sectionTitle">'+tr("connection")+'</h2><button class="btn secondary" data-target="cloud" onclick="openMod(this.dataset.target)">'+tr("cloud")+'</button>'+
+   '<h2 class="sectionTitle">Contact & soutien</h2>'+
+   '<div class="card supportCard"><div class="supportRow"><div><b>Contact / support</b><small>simocosto@gmail.com</small></div><a class="btn secondary mini" href="mailto:simocosto@gmail.com">✉</a></div><div class="supportRow"><div><b>PayPal</b><small>Simo-helene@hotmail.com</small></div><button class="btn secondary mini" onclick="copySupport(\'Simo-helene@hotmail.com\')">Copier</button></div><div class="supportRow"><div><b>XRP</b><small class="supportCode">rfZouDq7MQys8J1JAoA6xgQYSG9VsBtf3g</small></div><button class="btn secondary mini" onclick="copySupport(\'rfZouDq7MQys8J1JAoA6xgQYSG9VsBtf3g\')">Copier</button></div><div class="supportRow"><div><b>Confidentialité</b><small>Politique de confidentialité</small></div><a class="btn secondary mini" href="privacy.html">Ouvrir</a></div></div>'+
+   '<h2 class="sectionTitle">'+tr("application")+'</h2>'+
+   '<button class="btn secondary" onclick="toggleNight()">'+(state.nightMode?"☀️ "+tr("normalMode"):"🌙 "+tr("nightMode"))+'</button>'+
+   '<div style="height:12px"></div>'+btn(tr("resetAll"),"resetAll()","danger")+'</main>';return
+  }
+
+  console.warn("MODULE_NOT_FOUND",k);
+  root.innerHTML='<main class="screen">'+header("Module indisponible","NAËL")+'<div class="notice">Ce module n’est pas disponible dans cette version.</div><button class="btn primary" onclick="back()">Retour</button></main>';
+ }catch(err){
+  console.error("MODULE_RENDER_ERROR",k,err);
+  root.innerHTML='<main class="screen">'+header("Oups","MODULE")+'<div class="notice">Ce module a rencontré une erreur. Le reste de Naël continue de fonctionner.</div><button class="btn primary" onclick="back()">Retour</button></main>';
+ }
+}
+function desc(k){return {feeding:"Repas, biberons, allaitement ou diversification.",sleep:"Siestes et nuits.",diapers:"Suivi des changes.",healthlog:"Notes de santé à partager si besoin avec un professionnel.",journal:"Une note sur votre journée.",memories:"Un souvenir à garder.",activities:"Une activité réalisée aujourd’hui.",family:"Notes et organisation familiale.",medications:"Organisation des traitements prescrits.",emergency:"Informations essentielles accessibles rapidement.",doctorpack:"Résumé de consultation prêt à imprimer.",activities:"Idées d’éveil et journal des activités.",development:"Repères et progrès observés.",routines:"Routines simples et flexibles du quotidien.",travel:"Organisation des déplacements et séjours.",travelpack:"Checklist rapide pour le sac bébé."}[k]}
+function eventHistory(k){const arr=state.events.filter(e=>e.profileId===state.activeProfileId&&e.type===k).slice().reverse();return arr.length?arr.map(e=>'<div class="list card"><div><div class="eyebrow">'+new Date(e.ts).toLocaleString()+'</div><p>'+esc(e.note)+'</p></div><button class="back" style="margin-left:auto" onclick="deleteEvent(\''+e.id+'\')">Suppr.</button></div>').join(""):'<div class="empty card">Aucune entrée.</div>'}
+function appointmentHistory(){const a=state.appointments.filter(x=>x.profileId===state.activeProfileId).sort((x,y)=>new Date(x.date)-new Date(y.date));return a.length?a.map(x=>'<div class="list card"><div class="li">📅</div><div style="flex:1"><h3>'+esc(x.title)+'</h3><p>'+new Date(x.date).toLocaleString()+(x.note?' • '+esc(x.note):'')+'</p><div class="profileActions"><button class="btn secondary mini" onclick="editAppointment(\''+x.id+'\')">Modifier</button><button class="btn danger mini" onclick="deleteAppointment(\''+x.id+'\')">Supprimer</button></div></div></div>').join(""):'<div class="empty card">Aucun rendez-vous.</div>'}
+function vaccineHistory(){const a=state.vaccines.filter(x=>x.profileId===state.activeProfileId);return a.length?a.map(v=>'<div class="list card"><div class="li">💉</div><div style="flex:1"><h3>'+esc(v.name)+'</h3><p>'+esc(v.date||"Date non définie")+' • '+esc(v.status)+'</p><div class="profileActions"><button class="btn success mini" onclick="markVaccineDone(\''+v.id+'\')">Fait</button><button class="btn danger mini" onclick="deleteVaccine(\''+v.id+'\')">Supprimer</button></div></div></div>').join(""):'<div class="empty card">Aucun vaccin enregistré.</div>'}
+function reminderHistory(){const a=state.reminders.filter(x=>x.profileId===state.activeProfileId).sort((x,y)=>new Date(x.when)-new Date(y.when));return a.length?a.map(r=>'<div class="list card"><div class="li">'+(r.done?"✅":"🔔")+'</div><div style="flex:1"><h3>'+esc(r.title)+'</h3><p>'+new Date(r.when).toLocaleString()+'</p></div><button class="back" onclick="toggleReminder(\''+r.id+'\')">'+(r.done?"Réouvrir":"Fait")+'</button></div>').join(""):'<div class="empty card">Aucun rappel.</div>'}
+function growthHistory(){const a=state.growth.filter(x=>x.profileId===state.activeProfileId);return a.length?a.slice().reverse().map(g=>'<div class="list card"><div class="li">📈</div><div><h3>'+esc(g.weight||"—")+' kg • '+esc(g.height||"—")+' cm</h3><p>'+new Date(g.ts).toLocaleDateString()+'</p></div></div>').join(""):'<div class="empty card">Aucune mesure.</div>'}
+function milestoneHistory(){const a=state.milestones.filter(x=>x.profileId===state.activeProfileId);return a.length?a.slice().reverse().map(m=>'<div class="list card"><div class="li">⭐</div><div><h3>'+esc(m.title)+'</h3><p>'+esc(m.date||"Date non précisée")+'</p></div></div>').join(""):'<div class="empty card">Aucun jalon.</div>'}
+
+window.stage=s=>{state.stage=s;save();window.history.pushState({},'',location.pathname);render()}
+window.choose=j=>{state.journey=j;state.stage="app";state.screen="home";save();window.history.pushState({},'',location.pathname);render()}
+window.go=s=>{state.stage="app";state.screen=s;state.module=null;state.editingProfileId=null;state.quickOpen=false;save();window.history.pushState({},'',location.pathname);render()}
+window.openMod=k=>{
+ state.stage="app";
+ state.quickOpen=false;
+ if(k==="profile"){state.module=null;state.screen="profile";save();window.history.pushState({},'',location.pathname);render();return}
+ state.moduleParent=state.screen||"home";
+ state.module=k;save();window.history.pushState({},'',location.pathname);render()
+}
+window.back=()=>{
+ if(state.module){
+  const parent=state.moduleParent||state.screen||"home";
+  state.module=null;
+  state.moduleParent=null;
+  state.screen=parent;
+  save();render();return
+ }
+ if(state.stage==="app"&&state.screen!=="home"){state.screen="home";save();render();return}
+ if(state.stage==="app"){state.screen="home";save();render();return}
+ if(state.stage==="journey"){state.stage="splash";save();render()}
+}
+window.newProfile=()=>{state.editingProfileId=null;state.avatarDraft="👶";state.photoDraft=null;showProfileForm()}
+window.editProfile=id=>{state.editingProfileId=id;showProfileForm()}
+window.pickAvatar=i=>{state.avatarDraft=i;state.photoDraft=null;showProfileForm()}
+window.loadPhoto=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{state.photoDraft=reader.result;state.avatarDraft="👶";showProfileForm()};reader.readAsDataURL(f)}
+window.saveProfileForm=()=>{const name=document.getElementById("pname").value.trim();if(!name){toast("Prénom requis");return}const data={name,birth:document.getElementById("pbirth").value,sex:document.getElementById("psex").value,weightBirth:document.getElementById("pweight").value,heightBirth:document.getElementById("pheight").value,allergies:document.getElementById("pallergies").value.trim(),doctor:document.getElementById("pdoctor").value.trim(),avatar:state.avatarDraft||"👶",photo:state.photoDraft||null};if(state.editingProfileId){const p=state.profiles.find(x=>x.id===state.editingProfileId);Object.assign(p,data);toast("Profil modifié ✓")}else{const p={id:uid(),...data};state.profiles.push(p);state.activeProfileId=p.id;toast("Profil créé ✓")}state.editingProfileId=null;state.screen="profile";save();render()}
+window.deleteProfile=id=>{const p=state.profiles.find(x=>x.id===id);if(!p||!confirm("Supprimer le profil de "+p.name+" ?"))return;state.profiles=state.profiles.filter(x=>x.id!==id);["events","appointments","vaccines","reminders","growth","milestones","documents","memories","medications","activityLog","routines","trips","travelItems"].forEach(k=>state[k]=state[k].filter(x=>x.profileId!==id));delete state.checklists[id];if(state.activeProfileId===id)state.activeProfileId=state.profiles[0]?.id||null;save();toast("Profil supprimé");renderProfile()}
+window.setActive=id=>{state.activeProfileId=id;state.screen="home";state.module=null;save();toast("Profil actif changé ✓");render()}
+window.quickAdd=k=>{state.quickOpen=false;state.moduleParent=state.screen||"home";state.module=k;save();render()}
+
+
+
+
+async function initSupabase(){
+ try{
+  const supabaseGlobal = window.supabase;
+  if(!supabaseGlobal || typeof supabaseGlobal.createClient!=="function"){
+   console.warn("Supabase client non chargé — mode local conservé.");
+   sb=null; currentSession=null; return;
+  }
+  sb=supabaseGlobal.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+  const {data,error}=await sb.auth.getSession();
+  if(error)console.warn("Supabase session:",error.message);
+  currentSession=data?.session||null;
+  sb.auth.onAuthStateChange(async(_event,session)=>{
+   currentSession=session||null;
+   remoteFamily=null;
+   if(!currentSession&&realtimeChannel){
+    try{await sb.removeChannel(realtimeChannel)}catch(e){}
+    realtimeChannel=null
+   }
+   if(currentSession){
+    await loadFamilyMembers()
+   }
+   if(state.module==="cloud")renderCloud()
+  });
+  if(currentSession&&state.connected?.syncEnabled)syncNow(); if(currentSession){loadFamilyMembers()}
+ }catch(e){
+  console.error("Supabase init",e);
+  sb=null; currentSession=null;
+ }
+}
+window.signUpCloud=async()=>{if(!sb)return;const email=document.getElementById("authEmail").value.trim(),password=document.getElementById("authPassword").value;if(!email||password.length<6){toast("Email + mot de passe de 6 caractères minimum");return}const {data,error}=await sb.auth.signUp({email,password});if(error){toast(error.message);return}toast(data.session?"Compte créé et connecté ✓":"Compte créé — vérifie ton email ✓")}
+window.signInCloud=async()=>{if(!sb)return;const email=document.getElementById("authEmail").value.trim(),password=document.getElementById("authPassword").value;const {error}=await sb.auth.signInWithPassword({email,password});if(error){toast(error.message);return}toast("Connecté ✓")}
+window.signOutCloud=async()=>{if(sb)await sb.auth.signOut();currentSession=null;remoteFamily=null;toast("Déconnecté");renderCloud()}
+window.joinFamily=async()=>{if(!sb||!currentSession){toast("Connecte-toi d’abord");return}const code=document.getElementById("joinFamilyCode").value.trim().toUpperCase();if(!code){toast("Entre un code famille");return}const {data,error}=await sb.functions.invoke("join-family",{body:{code}});if(error||data?.error){toast(data?.error||error.message);return}state.connected.familyId=data.family_id;state.connected.familyCode=code;remoteFamily=null;save();toast("Famille rejointe ✓");renderCloud()}
+
+window.testAIBackend=async()=>{
+ if(!sb||!currentSession){toast("Connecte-toi au cloud d’abord");return}
+ try{
+  const {data,error}=await sb.functions.invoke("nael-ai",{body:{
+   question:"Réponds uniquement par OK.",
+   profile:activeProfile(),
+   context:{}
+  }});
+  if(!error&&data?.answer){toast("Naël AI distante fonctionne ✓");return}
+  if(data?.error==="AI_NOT_CONFIGURED"){toast("Backend IA prêt — clé fournisseur manquante");return}
+  toast("Backend IA prêt — fournisseur non configuré")
+ }catch(e){
+  toast("Test IA impossible")
+ }
+}
+window.saveAIEndpoint=()=>{state.connected.aiEndpoint=document.getElementById("aiEndpoint").value.trim();save();toast("Endpoint IA enregistré ✓");renderCloud()}
+window.saveCloudEndpoint=()=>{state.connected.cloudEndpoint=document.getElementById("cloudEndpoint").value.trim();save();toast("Endpoint cloud enregistré ✓");renderCloud()}
+window.toggleSync=()=>{state.connected.syncEnabled=!state.connected.syncEnabled;save();renderCloud()}
+window.addFamilyMember=()=>{const name=document.getElementById("familyName").value.trim(),role=document.getElementById("familyRole").value;if(!name){toast("Nom requis");return}(state.connected.members||(state.connected.members=[])).push({id:uid(),name,role,ts:new Date().toISOString()});save();toast("Membre ajouté ✓");renderCloud()}
+window.removeFamilyMember=id=>{state.connected.members=(state.connected.members||[]).filter(x=>x.id!==id);save();renderCloud()}
+
+window.toggleChecklist=(list,id)=>{ensureChecklists();const arr=state.checklists[state.activeProfileId][list]||[];const it=arr.find(x=>x.id===id);if(it)it.done=!it.done;save();renderChecklists()}
+window.addChecklistItem=list=>{ensureChecklists();const el=document.getElementById("new_"+list),txt=el.value.trim();if(!txt){toast("Écris un élément");return}(state.checklists[state.activeProfileId][list]||(state.checklists[state.activeProfileId][list]=[])).push({id:uid(),text:txt,done:false});save();renderChecklists()}
+window.addDocument=async()=>{const title=document.getElementById("docTitle").value.trim(),cat=document.getElementById("docCategory").value,note=document.getElementById("docNote").value.trim(),f=document.getElementById("docFile").files[0];if(!title){toast("Titre requis");return}const id=uid();let storagePath=null,preview=null,mime=f?.type||null,fileName=f?.name||null;try{if(f&&currentSession){toast("Envoi cloud…");storagePath=await uploadPrivateFile(f,"documents",id)}else if(f){preview=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(f)})}state.documents.push({id,profileId:state.activeProfileId,title,category:cat,note,preview,mime,fileName,storagePath,ts:new Date().toISOString()});save();toast(storagePath?"Document cloud ajouté ✓":"Document ajouté ✓");renderDocuments()}catch(e){console.error(e);toast("Échec de l’envoi — rien n’a été perdu")}}
+window.deleteDocument=async id=>{if(!confirm("Supprimer ce document ?"))return;const d=state.documents.find(x=>x.id===id);if(d?.storagePath&&sb&&currentSession){await sb.storage.from("nael-private").remove([d.storagePath]).catch(()=>{})}state.documents=state.documents.filter(x=>x.id!==id);save();renderDocuments()}
+window.addMemory=async()=>{const f=document.getElementById("memoryFile").files[0],caption=document.getElementById("memoryCaption").value.trim(),date=document.getElementById("memoryDate").value;if(!f&&!caption){toast("Ajoute une photo ou une légende");return}const id=uid();let storagePath=null,photo=null;try{if(f&&currentSession){toast("Envoi cloud…");storagePath=await uploadPrivateFile(f,"memories",id)}else if(f){photo=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(f)})}state.memories.push({id,profileId:state.activeProfileId,caption,date,photo,storagePath,ts:new Date().toISOString()});save();toast(storagePath?"Souvenir cloud ajouté ✓":"Souvenir ajouté ✓");renderMemoriesAlbum()}catch(e){console.error(e);toast("Échec de l’envoi photo")}}
+window.deleteMemory=async id=>{if(!confirm("Supprimer ce souvenir ?"))return;const m=state.memories.find(x=>x.id===id);if(m?.storagePath&&sb&&currentSession){await sb.storage.from("nael-private").remove([m.storagePath]).catch(()=>{})}state.memories=state.memories.filter(x=>x.id!==id);save();renderMemoriesAlbum()}
+
+window.startSleepTimer=()=>{state.sleepTimers[state.activeProfileId]={startedAt:Date.now()};save();toast("Sommeil démarré 🌙");renderSleep()}
+window.stopSleepTimer=()=>{const t=sleepTimer();if(!t)return;const mins=Math.max(1,Math.round((Date.now()-t.startedAt)/60000));const type=document.getElementById("sleepType")?.value||"nap";state.events.push({id:uid(),profileId:state.activeProfileId,type:"sleep",sleepType:type,durationMin:mins,note:"Sommeil chronométré",ts:new Date(t.startedAt).toISOString(),endedAt:new Date().toISOString()});delete state.sleepTimers[state.activeProfileId];save();toast("Sommeil enregistré ✓");renderSleep()}
+window.saveSleepManual=()=>{const mins=Number(document.getElementById("sleepDuration").value||0),type=document.getElementById("sleepType").value,note=document.getElementById("sleepNote").value.trim();if(!mins){toast("Ajoute une durée");return}state.events.push({id:uid(),profileId:state.activeProfileId,type:"sleep",sleepType:type,durationMin:mins,note:note||"Sommeil manuel",ts:new Date().toISOString()});save();toast("Sommeil ajouté ✓");renderSleep()}
+window.startFeedTimer=()=>{state.feedTimers[state.activeProfileId]={startedAt:Date.now()};save();toast("Chronomètre allaitement démarré");renderFeeding()}
+window.stopFeedTimer=()=>{const t=feedTimer();if(!t)return;const mins=Math.max(1,Math.round((Date.now()-t.startedAt)/60000));state.events.push({id:uid(),profileId:state.activeProfileId,type:"feeding",feedType:"breast",durationMin:mins,note:"Allaitement chronométré",ts:new Date(t.startedAt).toISOString()});delete state.feedTimers[state.activeProfileId];save();toast("Allaitement enregistré ✓");renderFeeding()}
+window.saveFeeding=()=>{const type=document.getElementById("feedType").value,ml=Number(document.getElementById("feedMl").value||0),dur=Number(document.getElementById("feedDuration").value||0),note=document.getElementById("feedNote").value.trim();if(type==="bottle"&&!ml&&!note){toast("Ajoute une quantité ou une note");return}state.events.push({id:uid(),profileId:state.activeProfileId,type:"feeding",feedType:type,ml:ml||null,durationMin:dur||null,note:note||"Repas",ts:new Date().toISOString()});save();toast("Repas enregistré ✓");renderFeeding()}
+window.quickDiaper=kind=>{const note=document.getElementById("diaperNote")?.value.trim()||"";const labels={wet:"Couche humide",dirty:"Selles",mixed:"Couche mixte"};state.events.push({id:uid(),profileId:state.activeProfileId,type:"diapers",diaperType:kind,note:note||labels[kind],ts:new Date().toISOString()});save();toast("Couche enregistrée ✓");renderDiapers()}
+
+window.addEvent=k=>{const note=document.getElementById("eventNote").value.trim();if(!note){toast("Ajoute une note");return}state.events.push({id:uid(),profileId:state.activeProfileId,type:k,note,ts:new Date().toISOString()});save();toast("Ajouté ✓");renderModule()}
+window.deleteEvent=id=>{state.events=state.events.filter(e=>e.id!==id);save();renderModule()}
+window.addGrowth=()=>{state.growth.push({id:uid(),profileId:state.activeProfileId,weight:document.getElementById("gweight").value,height:document.getElementById("gheight").value,ts:new Date().toISOString()});save();toast("Mesure ajoutée ✓");renderModule()}
+window.addAppointment=()=>{const title=document.getElementById("atitle").value.trim(),date=document.getElementById("adate").value;if(!title||!date){toast("Objet et date requis");return}const mins=Number(document.getElementById("aremind").value),id=uid();state.appointments.push({id,profileId:state.activeProfileId,title,date,note:document.getElementById("anote").value.trim()});const when=new Date(new Date(date).getTime()-mins*60000).toISOString();state.reminders.push({id:uid(),profileId:state.activeProfileId,title:"Rendez-vous : "+title,when,done:false,source:"appointment",sourceId:id});save();toast("Rendez-vous + rappel ajoutés ✓");renderModule()}
+window.editAppointment=id=>{const a=state.appointments.find(x=>x.id===id);if(!a)return;const title=prompt("Objet",a.title);if(title===null)return;const date=prompt("Date/heure ISO",a.date);if(date===null)return;a.title=title;a.date=date;save();toast("Rendez-vous modifié ✓");renderModule()}
+window.deleteAppointment=id=>{if(!confirm("Supprimer ce rendez-vous ?"))return;state.appointments=state.appointments.filter(x=>x.id!==id);state.reminders=state.reminders.filter(x=>x.sourceId!==id);save();renderModule()}
+window.addVaccine=()=>{const name=document.getElementById("vname").value.trim(),date=document.getElementById("vdate").value;if(!name){toast("Nom requis");return}const id=uid();state.vaccines.push({id,profileId:state.activeProfileId,name,date,status:document.getElementById("vstatus").value});if(date)state.reminders.push({id:uid(),profileId:state.activeProfileId,title:"Vaccin / rappel : "+name,when:new Date(date+"T09:00:00").toISOString(),done:false,source:"vaccine",sourceId:id});save();toast("Vaccin enregistré ✓");renderModule()}
+window.markVaccineDone=id=>{const v=state.vaccines.find(x=>x.id===id);if(v)v.status="done";state.reminders.filter(x=>x.sourceId===id).forEach(r=>r.done=true);save();toast("Vaccin marqué fait ✓");renderModule()}
+window.deleteVaccine=id=>{if(!confirm("Supprimer ce vaccin ?"))return;state.vaccines=state.vaccines.filter(x=>x.id!==id);state.reminders=state.reminders.filter(x=>x.sourceId!==id);save();renderModule()}
+
+
+
+window.addTravelItem=()=>{
+ const title=document.getElementById("travelNewItem").value.trim();
+ if(!title){toast("Élément requis");return}
+ state.travelItems.push({id:uid(),profileId:state.activeProfileId,source:"custom",cat:document.getElementById("travelNewCat").value,title,done:false,ts:new Date().toISOString()});
+ save();renderTravelPack()
+}
+window.toggleTravelItem=(id,done)=>{const x=state.travelItems.find(i=>i.id===id);if(x){x.done=done;save()}}
+window.deleteTravelItem=id=>{state.travelItems=state.travelItems.filter(x=>x.id!==id);save();renderTravelPack()}
+window.resetTravelPack=()=>{
+ if(!confirm("Réinitialiser toute la checklist ?"))return;
+ state.travelItems=state.travelItems.filter(x=>x.profileId!==state.activeProfileId);
+ save();renderTravelPack()
+}
+window.markTravelReady=()=>{
+ state.travelItems.filter(x=>x.profileId===state.activeProfileId).forEach(x=>x.done=true);
+ save();toast("Sac prêt ✓");renderTravelPack()
+}
+window.addTrip=()=>{
+ const title=document.getElementById("tripTitle").value.trim();
+ if(!title){toast("Nom du voyage requis");return}
+ state.trips.push({
+  id:uid(),profileId:state.activeProfileId,title,
+  destination:document.getElementById("tripDestination").value.trim(),
+  departure:document.getElementById("tripDeparture").value,
+  returnAt:document.getElementById("tripReturn").value,
+  transport:document.getElementById("tripTransport").value,
+  stay:document.getElementById("tripStay").value.trim(),
+  notes:document.getElementById("tripNotes").value.trim(),
+  ts:new Date().toISOString()
+ });
+ save();toast("Voyage enregistré ✓");renderTravel()
+}
+window.deleteTrip=id=>{if(!confirm("Supprimer ce voyage ?"))return;state.trips=state.trips.filter(x=>x.id!==id);save();renderTravel()}
+window.copyTripSummary=id=>{
+ const t=state.trips.find(x=>x.id===id);if(!t)return;
+ let txt="Naël — "+t.title+"\n";
+ txt+="Destination : "+(t.destination||"—")+"\n";
+ txt+="Transport : "+(t.transport||"—")+"\n";
+ txt+="Départ : "+(t.departure?new Date(t.departure).toLocaleString():"—")+"\n";
+ txt+="Retour : "+(t.returnAt?new Date(t.returnAt).toLocaleString():"—")+"\n";
+ txt+="Hébergement : "+(t.stay||"—")+"\n";
+ txt+="Notes : "+(t.notes||"—");
+ navigator.clipboard?.writeText(txt).then(()=>toast("Résumé copié ✓")).catch(()=>toast("Copie impossible"))
+}
+window.logActivity=(title,status)=>{
+ state.activityLog.push({id:uid(),profileId:state.activeProfileId,title,status,ts:new Date().toISOString()});
+ save();toast(status==="loved"?"Activité adorée ⭐":"Activité enregistrée ✓");renderActivities()
+}
+window.addDevelopment=()=>{
+ const title=document.getElementById("devTitle").value.trim(),note=document.getElementById("devNote").value.trim();
+ if(!title){toast("Décris le progrès");return}
+ state.milestones.push({id:uid(),profileId:state.activeProfileId,title,note,ts:new Date().toISOString()});
+ save();toast("Progrès ajouté ✓");renderDevelopment()
+}
+window.addRoutine=()=>{
+ const title=document.getElementById("routineTitle").value.trim();
+ if(!title){toast("Nom de routine requis");return}
+ state.routines.push({id:uid(),profileId:state.activeProfileId,title,time:document.getElementById("routineTime").value,note:document.getElementById("routineNote").value.trim(),ts:new Date().toISOString()});
+ save();toast("Routine ajoutée ✓");renderRoutines()
+}
+window.deleteRoutine=id=>{if(!confirm("Supprimer cette routine ?"))return;state.routines=state.routines.filter(x=>x.id!==id);save();renderRoutines()}
+
+
+window.addFeedingSafe=()=>{
+ const amount=Number(document.getElementById("feedAmount")?.value||0);
+ const subtype=document.getElementById("feedType")?.value||"meal";
+ const note=(document.getElementById("feedNote")?.value||"").trim();
+ state.events.push({id:uid(),profileId:state.activeProfileId,type:"feeding",subtype,amountMl:amount||0,note,ts:new Date().toISOString()});
+ save();toast("Repas ajouté ✓");renderFeedingSafe()
+}
+window.addSleepSafe=()=>{
+ const durationMin=Number(document.getElementById("sleepMinutes")?.value||0);
+ const note=(document.getElementById("sleepNote")?.value||"").trim();
+ if(!durationMin){toast("Indique une durée");return}
+ state.events.push({id:uid(),profileId:state.activeProfileId,type:"sleep",durationMin,note,ts:new Date().toISOString()});
+ save();toast("Sommeil ajouté ✓");renderSleepSafe()
+}
+window.addDiaperSafe=()=>{
+ const subtype=document.getElementById("diaperType")?.value||"pee";
+ const note=(document.getElementById("diaperNote")?.value||"").trim();
+ state.events.push({id:uid(),profileId:state.activeProfileId,type:"diapers",subtype,note,ts:new Date().toISOString()});
+ save();toast("Change ajouté ✓");renderDiapersSafe()
+}
+window.addHealthLog=()=>{
+ const note=(document.getElementById("healthLogNote")?.value||"").trim();
+ if(!note){toast("Écris une observation");return}
+ state.events.push({id:uid(),profileId:state.activeProfileId,type:"healthlog",note,ts:new Date().toISOString()});
+ save();toast("Observation ajoutée ✓");renderHealthLog()
+}
+window.addJournalEntry=()=>{
+ const note=(document.getElementById("journalNote")?.value||"").trim();
+ if(!note){toast("Écris une note");return}
+ state.events.push({id:uid(),profileId:state.activeProfileId,type:"journal",note,ts:new Date().toISOString()});
+ save();toast("Ajouté au journal ✓");renderJournal()
+}
+window.filterResearch=()=>{
+ const q=(document.getElementById("researchQuery")?.value||"").trim().toLowerCase();
+ const items=(typeof trustedSources!=="undefined"&&Array.isArray(trustedSources))?trustedSources:[];
+ const filtered=!q?items:items.filter(x=>(x.title+" "+(x.org||"")+" "+((x.k||[]).join(" "))).toLowerCase().includes(q));
+ const box=document.getElementById("researchResults");if(box)box.innerHTML=researchSourcesHtml(filtered)
+}
+window.addMedication=()=>{
+ const name=document.getElementById("medName").value.trim();
+ if(!name){toast("Nom requis");return}
+ state.medications.push({
+  id:uid(),profileId:state.activeProfileId,name,
+  schedule:document.getElementById("medSchedule").value.trim(),
+  prescriber:document.getElementById("medPrescriber").value.trim(),
+  note:document.getElementById("medNote").value.trim(),
+  ts:new Date().toISOString(),takes:[]
+ });
+ save();toast("Traitement ajouté ✓");renderModule()
+}
+window.logMedicationTake=id=>{
+ const m=state.medications.find(x=>x.id===id);if(!m)return;
+ if(!Array.isArray(m.takes))m.takes=[];
+ m.takes.push(new Date().toISOString());
+ state.events.push({id:uid(),profileId:state.activeProfileId,type:"healthlog",note:"Prise enregistrée : "+m.name,ts:new Date().toISOString()});
+ save();toast("Prise enregistrée ✓");renderModule()
+}
+window.deleteMedication=id=>{if(!confirm("Supprimer ce traitement ?"))return;state.medications=state.medications.filter(x=>x.id!==id);save();renderModule()}
+window.copyDoctorPack=()=>{
+ const d=doctorPackData(),p=d.profile||{};
+ let txt="Naël — Pack consultation\n";
+ txt+="Enfant : "+(p.name||"")+(p.birth?" — "+ageText(p.birth):"")+"\n";
+ txt+="Allergies / infos : "+(p.allergies||"Non renseigné")+"\n";
+ txt+="Médecin : "+(p.doctor||"Non renseigné")+"\n";
+ if(d.growth)txt+="Dernière croissance : "+(d.growth.weight||"—")+" kg / "+(d.growth.height||"—")+" cm\n";
+ txt+="Traitements : "+(d.medications.length?d.medications.map(m=>m.name+" ("+(m.schedule||"")+")").join("; "):"aucun")+"\n";
+ txt+="Vaccins : "+(d.vaccines.length?d.vaccines.map(v=>v.name+" "+(v.status||"")).join("; "):"aucun")+"\n";
+ txt+="Observations récentes : "+(d.notes.length?d.notes.map(n=>n.note).join(" | "):"aucune");
+ navigator.clipboard?.writeText(txt).then(()=>toast("Résumé copié ✓")).catch(()=>toast("Copie impossible"))
+}
+window.addReminder=()=>{const title=document.getElementById("rtitle").value.trim(),when=document.getElementById("rwhen").value;if(!title||!when){toast("Titre et date requis");return}state.reminders.push({id:uid(),profileId:state.activeProfileId,title,when:new Date(when).toISOString(),done:false,source:"custom"});save();toast("Rappel créé ✓");renderModule()}
+window.toggleReminder=id=>{const r=state.reminders.find(x=>x.id===id);if(r)r.done=!r.done;save();renderModule()}
+window.addMilestone=()=>{const title=document.getElementById("mtitle").value.trim();if(!title){toast("Moment requis");return}state.milestones.push({id:uid(),profileId:state.activeProfileId,title,date:document.getElementById("mdate").value});save();toast("Jalon ajouté ✓");renderModule()}
+
+function urlBase64ToUint8Array(base64String){
+ const padding="=".repeat((4-base64String.length%4)%4);
+ const base64=(base64String+padding).replace(/-/g,"+").replace(/_/g,"/");
+ const raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)))
+}
+window.enablePush=async()=>{
+ if(!sb||!currentSession){toast("Connecte-toi au cloud d’abord");return}
+ if(!("serviceWorker" in navigator)||!("PushManager" in window)){toast("Push non supporté sur ce navigateur");return}
+ try{
+  const permission=await Notification.requestPermission();
+  if(permission!=="granted"){toast("Notifications refusées");return}
+  const reg=await navigator.serviceWorker.ready;
+
+  let cfgResp=await sb.functions.invoke("push-config",{body:{}});
+  let cfg=cfgResp.data;
+
+  if(cfgResp.error||!cfg?.configured||!cfg?.publicKey){
+   toast("Initialisation sécurisée du push…");
+   const setup=await sb.functions.invoke("setup-push",{body:{}});
+   if(setup.error||!setup.data?.configured||!setup.data?.publicKey){
+    console.error(setup.error||setup.data);
+    toast("Initialisation push impossible");
+    return
+   }
+   cfg=setup.data
+  }
+
+  let sub=await reg.pushManager.getSubscription();
+  if(!sub){
+   sub=await reg.pushManager.subscribe({
+    userVisibleOnly:true,
+    applicationServerKey:urlBase64ToUint8Array(cfg.publicKey)
+   })
+  }
+
+  const fam=await ensureRemoteFamily();
+  const j=sub.toJSON();
+  const {error}=await sb.from("push_subscriptions").upsert({
+   user_id:currentSession.user.id,
+   family_id:fam.id,
+   endpoint:j.endpoint,
+   p256dh:j.keys?.p256dh||null,
+   auth:j.keys?.auth||null,
+   user_agent:navigator.userAgent,
+   updated_at:new Date().toISOString()
+  },{onConflict:"endpoint"});
+  if(error)throw error;
+
+  state.connected.pushConfigured=true;
+  state.connected.pushSubscribed=true;
+  save();
+  toast("Push cloud activé ✓")
+ }catch(e){
+  console.error(e);
+  toast("Impossible d’activer le push")
+ }
+}
+window.sendTestPush=async()=>{
+ if(!sb||!currentSession){toast("Connecte-toi au cloud");return}
+ if(!state.connected.pushSubscribed){toast("Active d’abord le push cloud");return}
+ try{
+  const fam=await ensureRemoteFamily();
+  const {data,error}=await sb.functions.invoke("send-push",{body:{
+   family_id:fam.id,
+   title:"Naël",
+   body:"Notification test réussie 👶"
+  }});
+  if(error||data?.error){
+   console.error(error||data);
+   toast("Test push impossible");
+   return
+  }
+  toast("Notification envoyée ✓")
+ }catch(e){
+  console.error(e);
+  toast("Test push impossible")
+ }
+}
+
+window.enableNotifications=async()=>{if(!("Notification"in window)){toast("Notifications non prises en charge");return}const p=await Notification.requestPermission();toast(p==="granted"?"Notifications autorisées ✓":"Permission refusée")}
+function checkReminders(){if(!("Notification"in window)||Notification.permission!=="granted")return;const now=Date.now();(Array.isArray(state.reminders)?state.reminders:[]).forEach(r=>{if(r&&!r.done&&!r.notified&&new Date(r.when).getTime()<=now){try{new Notification("Naël",{body:r.title})}catch(e){}r.notified=true}});save()}
+window.exportData=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="nael-sauvegarde-"+new Date().toISOString().slice(0,10)+".json";a.click();URL.revokeObjectURL(a.href);toast("Sauvegarde exportée ✓")}
+window.triggerImport=()=>document.getElementById("importFile").click()
+document.getElementById("importFile").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const imported=JSON.parse(r.result);state=normalizeState(imported);save();toast("Données importées ✓");render()}catch(err){toast("Fichier invalide")}};r.readAsText(f)})
+let deferredPrompt=null;window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e})
+window.installPWA=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null}else toast("Utilise « Ajouter à l’écran d’accueil » du navigateur")}
+window.resetAll=()=>{if(confirm("Supprimer toutes les données locales Naël ?")){localStorage.removeItem("nael.state.v4");state=JSON.parse(JSON.stringify(defaultState));toast("Données réinitialisées");render()}}
+
+window.toggleQuick=()=>{state.quickOpen=!state.quickOpen;render()}
+window.closeQuick=()=>{if(state.quickOpen){state.quickOpen=false;render()}}
+window.askAI=async()=>{
+ const q=document.getElementById("aiQuestion").value,box=document.getElementById("aiAnswer");
+ if(!q.trim()){box.textContent="Pose une question.";return}
+ box.textContent="Naël analyse les données…";
+ const remote=await remoteAI(q);
+ if(remote)renderAIResult(remote);
+ else box.innerHTML=esc(aiReply(q)).split("\n").join("<br>")+'<div class="aiMeta">Mode local de secours.</div>'
+}
+window.askPreset=async q=>{
+ const inp=document.getElementById("aiQuestion");if(inp)inp.value=q;
+ const box=document.getElementById("aiAnswer");box.textContent="Naël analyse les données…";
+ const remote=await remoteAI(q);
+ if(remote)renderAIResult(remote);
+ else box.innerHTML=esc(aiReply(q)).split("\n").join("<br>")+'<div class="aiMeta">Mode local de secours.</div>'
+}
+window.runResearch=()=>{const q=(document.getElementById("researchQ").value||"").toLowerCase();const words=q.split(/\s+/).filter(Boolean);const res=!words.length?trustedSources:trustedSources.filter(x=>words.some(w=>x.title.toLowerCase().includes(w)||x.desc.toLowerCase().includes(w)||x.k.some(k=>k.includes(w)||w.includes(k))));document.getElementById("researchResults").innerHTML=res.length?sourceCards(res):'<div class="empty card">Pas de source préchargée pour ce mot-clé. Essaie « sommeil », « vaccin », « fièvre », « médecin » ou « alimentation ».</div>'}
+window.toggleNight=()=>{state.nightMode=!state.nightMode;save();applyNight();render()}
+function applyNight(){document.documentElement.classList.toggle("night",!!state.nightMode)}
+applyNight();
+
+window.copySupport=async v=>{try{await navigator.clipboard.writeText(v);toast("Copié ✓")}catch(e){toast(v)}};
+setInterval(checkReminders,30000);checkReminders();
+window.addEventListener("popstate",()=>window.back());
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}))}
+initSupabase();
+
+
+document.addEventListener("keydown",e=>{
+ if(e.key==="Escape"&&state.quickOpen){
+  state.quickOpen=false;
+  render();
+ }
+});
+
+window.addEventListener("online",()=>{if(currentSession&&state.connected?.syncEnabled)syncNow(true)});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&currentSession&&state.connected?.syncEnabled)syncNow(true)});
+
+render();
+setTimeout(installTranslationObserver,0);
+</script>
+</body></html>
