@@ -1,13 +1,17 @@
 {
   "name": "Naël — Grandir ensemble",
   "short_name": "Naël",
-  "description": "Suivi parental premium",
+  "description": "Assistant parental premium : grossesse, bébé, suivi quotidien, santé, rappels et organisation familiale.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#061022",
   "theme_color": "#0b1730",
   "lang": "fr",
+  "categories": [
+    "health",
+    "lifestyle"
+  ],
   "icons": [
     {
       "src": "icon.svg",
