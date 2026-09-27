@@ -39,6 +39,9 @@ https://nael-parenting-app.vercel.app/support.html
 ## Privacy policy URL
 https://nael-parenting-app.vercel.app/privacy.html
 
+## PayPal support
+Simo-helene@hotmail.com
+
 ## XRP support address
 rfZouDq7MQys8J1JAoA6xgQYSG9VsBtf3g
 
